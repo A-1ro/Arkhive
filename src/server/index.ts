@@ -202,7 +202,7 @@ app.onError((error, c) => {
     500,
   );
 });
-app.get("*", (c) => {
+app.get("*", async (c) => {
   if (
     c.req.path.startsWith("/api/") ||
     c.req.path.startsWith("/auth/") ||
@@ -210,7 +210,9 @@ app.get("*", (c) => {
   ) {
     return c.json({ error: "Not found" }, 404);
   }
-  return c.env.ASSETS.fetch(c.req.raw);
+  const response = await c.env.ASSETS.fetch(c.req.raw);
+  // Asset responses have immutable headers; middleware needs a mutable copy.
+  return new Response(response.body, response);
 });
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 export default app;

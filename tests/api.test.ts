@@ -67,6 +67,24 @@ afterAll(async () => {
   await proxy?.dispose();
 });
 describe("D1 persistence and access control", () => {
+  it("serves immutable asset responses with security headers", async () => {
+    const asset = await fetch("data:text/html,<title>Arkhive</title>");
+    expect(() => asset.headers.set("X-Test", "value")).toThrow();
+    const response = await app.request(
+      `${canonicalOrigin}/`,
+      {},
+      {
+        ...proxy.env,
+        ASSETS: { ...proxy.env.ASSETS, fetch: async () => asset },
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("Content-Security-Policy")).toContain(
+      "frame-src",
+    );
+    expect(await response.text()).toContain("Arkhive");
+  });
   it("redirects both retired hosts while keeping their draft export endpoints available", async () => {
     for (const origin of legacyOrigins) {
       const redirect = await app.request(
