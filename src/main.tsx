@@ -59,6 +59,7 @@ import {
 } from "./shared/rules";
 import "./style.css";
 import { compressImage } from "./client/compress-image";
+import { NumberInput } from "./client/NumberInput";
 import { imageUrl } from "./shared/images";
 import {
   legacyImportKey,
@@ -837,19 +838,11 @@ function App() {
                         </Field>
                         <Field label="年齢" hint="AGE">
                           <div className="input-unit">
-                            <input
-                              type="number"
+                            <NumberInput
                               value={c.age}
                               min={15}
                               max={99}
-                              onChange={(e) =>
-                                update({
-                                  age: Math.max(
-                                    15,
-                                    Math.min(99, Number(e.target.value)),
-                                  ),
-                                })
-                              }
+                              onValueChange={(age) => update({ age })}
                             />
                             <span>歳</span>
                           </div>
@@ -923,19 +916,13 @@ function App() {
                             {label} <small>{short}</small>
                           </span>
                           <div>
-                            <input
+                            <NumberInput
                               aria-label={`${label}の現在値`}
-                              type="number"
                               min={0}
                               max={key === "currentSAN" ? d.maxSAN : value}
                               value={c[key] ?? value}
-                              onChange={(e) =>
-                                update({
-                                  [key]: Math.min(
-                                    key === "currentSAN" ? d.maxSAN : value,
-                                    Math.max(0, Number(e.target.value)),
-                                  ),
-                                })
+                              onValueChange={(current) =>
+                                update({ [key]: current })
                               }
                             />
                             <span>
@@ -1044,27 +1031,16 @@ function App() {
                               ))}
                             </select>
                             <span>×</span>
-                            <input
+                            <NumberInput
                               aria-label={`係数${i + 1}`}
-                              type="number"
                               min={0}
                               max={100}
                               value={term.multiplier}
-                              onChange={(e) =>
+                              decimal
+                              onValueChange={(multiplier) =>
                                 update({
                                   terms: c.terms.map((t, j) =>
-                                    i === j
-                                      ? {
-                                          ...t,
-                                          multiplier: Math.max(
-                                            0,
-                                            Math.min(
-                                              100,
-                                              Number(e.target.value),
-                                            ),
-                                          ),
-                                        }
-                                      : t,
+                                    i === j ? { ...t, multiplier } : t,
                                   ),
                                 })
                               }
@@ -1104,18 +1080,12 @@ function App() {
                     {c.pointMode === "manual" && (
                       <div className="form-grid manual-points">
                         <Field label="職業ポイント（直接入力）">
-                          <input
-                            type="number"
+                          <NumberInput
                             min={0}
                             max={999}
                             value={c.manualPoints}
-                            onChange={(e) =>
-                              update({
-                                manualPoints: Math.min(
-                                  999,
-                                  Math.max(0, Number(e.target.value)),
-                                ),
-                              })
+                            onValueChange={(manualPoints) =>
+                              update({ manualPoints })
                             }
                           />
                         </Field>
@@ -1275,22 +1245,13 @@ function App() {
                                 </td>
                                 <td>
                                   {s.custom ? (
-                                    <input
+                                    <NumberInput
                                       aria-label={`${s.name}の初期値`}
-                                      type="number"
                                       min={0}
                                       max={99}
                                       value={s.base}
-                                      onChange={(e) =>
-                                        updateSkill(s.id, {
-                                          base: Math.max(
-                                            0,
-                                            Math.min(
-                                              99,
-                                              Number(e.target.value),
-                                            ),
-                                          ),
-                                        })
+                                      onValueChange={(base) =>
+                                        updateSkill(s.id, { base })
                                       }
                                     />
                                   ) : (
@@ -1301,9 +1262,8 @@ function App() {
                                   ["occupation", "interest", "growth"] as const
                                 ).map((key, i) => (
                                   <td key={key}>
-                                    <input
+                                    <NumberInput
                                       aria-label={`${s.name}の${["職業", "興味", "成長"][i]}ポイント`}
-                                      type="number"
                                       min={0}
                                       max={99}
                                       value={s[key]}
@@ -1311,16 +1271,8 @@ function App() {
                                         s.name === "クトゥルフ神話" &&
                                         key !== "growth"
                                       }
-                                      onChange={(e) =>
-                                        updateSkill(s.id, {
-                                          [key]: Math.max(
-                                            0,
-                                            Math.min(
-                                              99,
-                                              Number(e.target.value),
-                                            ),
-                                          ),
-                                        })
+                                      onValueChange={(points) =>
+                                        updateSkill(s.id, { [key]: points })
                                       }
                                     />
                                   </td>
@@ -2065,21 +2017,16 @@ function App() {
                 </button>
               </div>
               <label htmlFor={`stat-${k}`}>{statLabels[k]}</label>
-              <input
+              <NumberInput
                 id={`stat-${k}`}
                 aria-label={k}
-                type="number"
                 min={0}
                 max={999}
-                value={c.stats[k] || ""}
+                value={c.stats[k]}
+                emptyWhenZero
                 placeholder="—"
-                onChange={(e) =>
-                  update({
-                    stats: {
-                      ...c.stats,
-                      [k]: Math.min(999, Math.max(0, Number(e.target.value))),
-                    },
-                  })
+                onValueChange={(value) =>
+                  update({ stats: { ...c.stats, [k]: value } })
                 }
               />
               <small>
