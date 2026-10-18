@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import app from "../src/server/index";
 import { hash } from "../src/server/auth";
 import { newCharacter } from "../src/shared/rules";
+import { canonicalOrigin, legacyOrigins } from "../src/shared/origins";
 let proxy: PlatformProxy<CloudflareBindings>;
 const firstToken = "first-user-local-test-token";
 const secondToken = "second-user-local-test-token";
@@ -66,6 +67,41 @@ afterAll(async () => {
   await proxy?.dispose();
 });
 describe("D1 persistence and access control", () => {
+  it("redirects both retired hosts while keeping their draft export endpoints available", async () => {
+    for (const origin of legacyOrigins) {
+      const redirect = await app.request(
+        `${origin}/?character=example`,
+        {},
+        proxy.env,
+      );
+      expect(redirect.status).toBe(308);
+      expect(redirect.headers.get("Location")).toBe(
+        `${canonicalOrigin}/?character=example`,
+      );
+      const migration = await app.request(`${origin}/migrate`, {}, proxy.env);
+      expect(migration.status).toBe(200);
+      expect(migration.headers.get("Content-Security-Policy")).toContain(
+        `frame-ancestors ${canonicalOrigin}`,
+      );
+    }
+  });
+  it("uses the custom-domain callback for Discord OAuth", async () => {
+    const response = await app.request(
+      `${canonicalOrigin}/auth/discord`,
+      {},
+      {
+        ...proxy.env,
+        DISCORD_CLIENT_ID: "test-client",
+        DISCORD_CLIENT_SECRET: "test-secret",
+      },
+    );
+    expect(response.status).toBe(302);
+    const authorize = new URL(response.headers.get("Location")!);
+    expect(authorize.origin).toBe("https://discord.com");
+    expect(authorize.searchParams.get("redirect_uri")).toBe(
+      `${canonicalOrigin}/auth/discord/callback`,
+    );
+  });
   it("checks D1 health and rejects anonymous access", async () => {
     expect((await request("/api/health")).status).toBe(200);
     expect(

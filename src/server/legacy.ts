@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { canonicalOrigin } from "../shared/legacy-drafts";
+import { canonicalOrigin } from "../shared/origins";
 
 const app = new Hono();
 app.use("*", async (c, next) => {

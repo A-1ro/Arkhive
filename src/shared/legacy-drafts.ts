@@ -1,9 +1,8 @@
 import { characterSchema, type Character } from "./rules";
+import { canonicalOrigin, legacyOrigins } from "./origins";
+export { canonicalOrigin } from "./origins";
 
-export const legacyOrigin =
-  "https://cthulhu-charactersheet.aaa-4e2k3.workers.dev";
-export const canonicalOrigin = "https://arkhive.aaa-4e2k3.workers.dev";
-export const legacyImportKey = "arkhive-legacy-import-v1";
+export const legacyImportKey = "arkhive-legacy-import-v2";
 
 export function parseLegacyDrafts(raw: unknown): Character[] | null {
   if (raw === null) return [];
@@ -30,17 +29,32 @@ export function mergeDrafts(
   return [...merged.values()];
 }
 
-// Transfer browser-only drafts between our two origins without putting them in URLs or sending them to a server.
-export function readLegacyDrafts(): Promise<Character[] | null> {
+// Transfer browser-only drafts without putting them in URLs or sending them to a server.
+export async function readLegacyDrafts(): Promise<{
+  drafts: Character[];
+  complete: boolean;
+} | null> {
   try {
     if (
       location.origin !== canonicalOrigin ||
       localStorage.getItem(legacyImportKey)
     )
-      return Promise.resolve(null);
+      return null;
   } catch {
-    return Promise.resolve(null);
+    return null;
   }
+  const results = await Promise.all(legacyOrigins.map(readLegacyOrigin));
+  if (results.every((result) => result === null)) return null;
+  return {
+    drafts: results.reduce<Character[]>(
+      (all, result) => mergeDrafts(all, result ?? []),
+      [],
+    ),
+    complete: results.every((result) => result !== null),
+  };
+}
+
+function readLegacyOrigin(legacyOrigin: string): Promise<Character[] | null> {
   return new Promise((resolve) => {
     const frame = document.createElement("iframe");
     const nonce = crypto.randomUUID();

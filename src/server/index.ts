@@ -13,8 +13,16 @@ import {
 } from "./auth";
 import { listCharacters, getCharacter, saveCharacter } from "./storage";
 import { handleMcp } from "./mcp";
+import legacy from "./legacy";
+import { legacyOrigins } from "../shared/origins";
 
 const app = new Hono<Env>();
+app.use("*", async (c, next) => {
+  if (legacyOrigins.some((origin) => origin === new URL(c.req.url).origin)) {
+    return legacy.fetch(c.req.raw);
+  }
+  await next();
+});
 app.use(
   "*",
   secureHeaders({
@@ -27,6 +35,7 @@ app.use(
       connectSrc: ["'self'"],
       fontSrc: ["'self'"],
       frameAncestors: ["'none'"],
+      frameSrc: [...legacyOrigins],
     },
   }),
 );
@@ -192,6 +201,16 @@ app.onError((error, c) => {
     { error: "処理に失敗しました。しばらくしてから再試行してください" },
     500,
   );
+});
+app.get("*", (c) => {
+  if (
+    c.req.path.startsWith("/api/") ||
+    c.req.path.startsWith("/auth/") ||
+    c.req.path === "/mcp"
+  ) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  return c.env.ASSETS.fetch(c.req.raw);
 });
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 export default app;

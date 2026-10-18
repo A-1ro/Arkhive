@@ -206,9 +206,9 @@ function App() {
     let live = true;
     void readLegacyDrafts().then((legacy) => {
       if (!live || legacy === null) return;
-      setSheets((current) => mergeDrafts(current, legacy));
-      setLegacyImported(true);
-      if (legacy.length) notify("旧URLの端末保存データを引き継ぎました");
+      setSheets((current) => mergeDrafts(current, legacy.drafts));
+      setLegacyImported(legacy.complete);
+      if (legacy.drafts.length) notify("旧URLの端末保存データを引き継ぎました");
     });
     return () => {
       live = false;

@@ -27,7 +27,7 @@ describe("URL migration", () => {
       await legacy.request("https://old.test/migration.js")
     ).text();
     expect(script).toContain(
-      'event.origin!=="https://arkhive.aaa-4e2k3.workers.dev"',
+      'event.origin!=="https://arkhive.hiyori-schedule.com"',
     );
     expect(script).toContain("event.source!==parent");
   });

@@ -4,11 +4,15 @@
   "main": "src/server/index.ts",
   "compatibility_date": "2026-10-18",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "arkhive.hiyori-schedule.com", "custom_domain": true },
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/auth/*", "/mcp", "/.well-known/*"],
+    "run_worker_first": true,
   },
   "observability": {
     "enabled": true,
