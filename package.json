@@ -1,5 +1,5 @@
 {
-  "name": "cthulhu-charactersheet",
+  "name": "arkhive",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "deploy": "npm run build && wrangler deploy",
+    "deploy:legacy": "wrangler deploy --config wrangler.legacy.jsonc",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",

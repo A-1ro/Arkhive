@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CALLBACK = "https://cthulhu-charactersheet.aaa-4e2k3.workers.dev/auth/discord/callback"
+CALLBACK = "https://arkhive.aaa-4e2k3.workers.dev/auth/discord/callback"
 
 def main():
     os.chdir(ROOT)

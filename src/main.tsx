@@ -55,6 +55,11 @@ import {
   type StatKey,
 } from "./shared/rules";
 import "./style.css";
+import {
+  legacyImportKey,
+  mergeDrafts,
+  readLegacyDrafts,
+} from "./shared/legacy-drafts";
 
 type User = { id: string; name: string; avatar: string | null };
 type Modal = "new" | "mcp" | "help" | "preview" | "delete" | "edition" | null;
@@ -118,6 +123,7 @@ function App() {
   const [menu, setMenu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState(false);
+  const [legacyImported, setLegacyImported] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("すべて");
   const [allocatedOnly, setAllocatedOnly] = useState(false);
@@ -197,13 +203,26 @@ function App() {
     };
   }, []);
   useEffect(() => {
+    let live = true;
+    void readLegacyDrafts().then((legacy) => {
+      if (!live || legacy === null) return;
+      setSheets((current) => mergeDrafts(current, legacy));
+      setLegacyImported(true);
+      if (legacy.length) notify("旧URLの端末保存データを引き継ぎました");
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  useEffect(() => {
     try {
       localStorage.setItem(localKey, JSON.stringify(sheets));
+      if (legacyImported) localStorage.setItem(legacyImportKey, "done");
       setLocalError(false);
     } catch {
       setLocalError(true);
     }
-  }, [sheets]);
+  }, [sheets, legacyImported]);
   useEffect(() => {
     if (modal !== "mcp" || !user) return;
     void api<typeof tokens>("/api/tokens")

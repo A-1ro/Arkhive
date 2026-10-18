@@ -2,8 +2,8 @@
 
 クトゥルフ神話TRPG（第6版）・新クトゥルフ神話TRPG（第7版）の非公式キャラクターシート作成サイトです。
 
-- 公開サイト: https://cthulhu-charactersheet.aaa-4e2k3.workers.dev
-- GitHub: https://github.com/A-1ro/cthulhu-charactersheet
+- 公開サイト: https://arkhive.aaa-4e2k3.workers.dev
+- GitHub: https://github.com/A-1ro/Arkhive
 - Hono / Cloudflare Workers / Cloudflare D1
 - React / TypeScript / Vite
 - Discord OAuth2（identifyのみ）
@@ -57,6 +57,10 @@ npm run deploy
 
 GitHub Actionsでは型検査・ビルド・テストを実行します。Cloudflareへの公開はローカルのWranglerから実行します。
 
+旧URLのWorkerは `wrangler.legacy.jsonc` で管理します。`npm run deploy:legacy` で転送処理を公開できます。D1は改名前から同じデータベースを使用しています。
+
+旧URLで端末保存した探索者は、新URLを開いた際にブラウザー内の通信で取り込みます。ブラウザーの制限などで取り込めない場合は、[旧URLのデータ書き出し](https://cthulhu-charactersheet.aaa-4e2k3.workers.dev/migrate)を同じブラウザーで開き、JSONを出力して新URLの「読み込み」から追加できます。移行済みデータを再度取り込まないよう、端末内に完了状態を保存します。
+
 ## Discordログインの有効化
 
 アプリ作成は利用者本人が行います。認証コードは実装済みですが、Client ID / Client Secretを登録するまではログインとクラウド保存・MCPトークン発行は利用できません。
@@ -65,7 +69,7 @@ GitHub Actionsでは型検査・ビルド・テストを実行します。Cloudf
 2. OAuth2 → Redirectsに以下を登録して保存。
 
 ```text
-https://cthulhu-charactersheet.aaa-4e2k3.workers.dev/auth/discord/callback
+https://arkhive.aaa-4e2k3.workers.dev/auth/discord/callback
 ```
 
 3. このリポジトリのディレクトリで次を実行。
@@ -75,6 +79,8 @@ python3 scripts/configure-discord.py
 ```
 
 Client IDとClient Secretを端末のプロンプトに入力します。Secretは画面表示・ファイル保存せず、stdinでWranglerへ渡してWorkers Secretsに保存します。チャットやリポジトリに秘密情報を貼らないでください。Botトークンは不要です。
+
+旧URLをDiscordのRedirectsに登録済みの場合は、上記の新URLも追加してください。
 
 4. 公開サイトを再読み込みして「Discordでログイン」。
 
@@ -90,7 +96,7 @@ Bearerヘッダー付きStreamable HTTPに対応したMCPクライアントへ�
 {
   "mcpServers": {
     "arkhive": {
-      "url": "https://cthulhu-charactersheet.aaa-4e2k3.workers.dev/mcp",
+      "url": "https://arkhive.aaa-4e2k3.workers.dev/mcp",
       "headers": {
         "Authorization": "Bearer <発行したトークン>"
       }
