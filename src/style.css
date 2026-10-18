@@ -2256,6 +2256,49 @@ h1 {
 }
 
 /* Print preview keeps a paper palette, independently of the workspace theme. */
+.public-sheet-page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+.public-sheet-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+.public-sheet-header > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.public-sheet-message {
+  padding: 28px 0;
+}
+.sharing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+.sharing-url {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+.sharing-url input {
+  width: 100%;
+  min-width: 0;
+}
+.sharing-status {
+  font-weight: 600;
+}
+.sharing-error {
+  color: var(--danger, #e99a8e);
+}
 .print-sheet {
   --paper-text: #293a35;
   --paper-muted: #526159;
@@ -3226,6 +3269,15 @@ h1 {
   }
   body > *:not(#root),
   #root > *:not(.modal-overlay) {
+    display: none !important;
+  }
+  #root > .public-sheet-page {
+    display: block !important;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+  .public-sheet-header {
     display: none !important;
   }
   .modal-overlay {

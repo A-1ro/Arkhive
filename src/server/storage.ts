@@ -23,7 +23,10 @@ export async function saveCharacter(
   if (!r.meta.changes) throw new Error("この探索者を編集する権限がありません");
   return (await getCharacter(db, userId, c.id))!;
 }
-function readCharacter(row: { data: string; image: string | null }): Character {
+export function readCharacter(row: {
+  data: string;
+  image: string | null;
+}): Character {
   return {
     ...JSON.parse(row.data),
     image: row.image ? JSON.parse(row.image) : null,

@@ -71,7 +71,8 @@ import {
 } from "./shared/legacy-drafts";
 
 type User = { id: string; name: string; avatar: string | null };
-type Modal = "new" | "mcp" | "help" | "preview" | "delete" | "edition" | null;
+type Modal =
+  "new" | "mcp" | "help" | "preview" | "sharing" | "delete" | "edition" | null;
 type Toast = { text: string; kind?: "error" | "ok" };
 const localKey = "mythos-notebook-v1";
 function readLocal(): Character[] {
@@ -86,7 +87,10 @@ function readLocal(): Character[] {
     return [];
   }
 }
-const initial = readLocal();
+const publicShareId = location.pathname.startsWith("/shared/")
+  ? location.pathname.slice("/shared/".length)
+  : null;
+const initial = publicShareId === null ? readLocal() : [];
 if (!initial.length) initial.push(newCharacter());
 async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const r = await fetch(url, {
@@ -136,6 +140,178 @@ function SkillNameInput({
   );
 }
 
+function CharacterSheet({
+  c,
+  portraitUrl,
+}: {
+  c: Character;
+  portraitUrl: string | null;
+}) {
+  const d = derived(c);
+  return (
+    <div className="print-sheet">
+      <div className="print-title">
+        <Logo />
+        <span>クトゥルフ神話TRPG 第{c.edition}版</span>
+      </div>
+      {portraitUrl && (
+        <img
+          className="print-portrait"
+          src={portraitUrl}
+          alt={`${c.name || "探索者"}の画像`}
+        />
+      )}
+      <h2>{c.name || "名前のない探索者"}</h2>
+      <p>
+        {c.occupation || "職業未設定"} · {c.age}歳 · {c.gender} · プレイヤー：
+        {c.player || "未設定"}
+      </p>
+      <p>
+        出身：{c.birthplace || "—"} ／ 住所：{c.residence || "—"}
+      </p>
+      <div className="print-stats">
+        {statKeys.map((k) => (
+          <div key={k}>
+            <span>{k}</span>
+            <b>{c.stats[k]}</b>
+            {c.edition === "7" && (
+              <small>
+                {Math.floor(c.stats[k] / 2)} / {Math.floor(c.stats[k] / 5)}
+              </small>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="print-vitals">
+        HP {c.currentHP ?? d.hp}/{d.hp}　MP {c.currentMP ?? d.mp}/{d.mp}　SAN{" "}
+        {c.currentSAN ?? d.san}/{d.maxSAN}　幸運 {d.luck}
+        　DB {d.db}
+        {c.edition === "7" && `　ビルド ${d.build}　MOV ${d.mov}`}
+      </div>
+      <h3>技能</h3>
+      <div className="print-skills">
+        {sortSkills(c.skills).map((s) => (
+          <div key={s.id}>
+            <span>{skillName(s)}</span>
+            <b>{skillTotal(s, c)}%</b>
+            {c.edition === "7" && (
+              <small>
+                {Math.floor(skillTotal(s, c) / 2)} /{" "}
+                {Math.floor(skillTotal(s, c) / 5)}
+              </small>
+            )}
+          </div>
+        ))}
+      </div>
+      {(
+        [
+          ["appearance", "容姿の描写"],
+          ["belief", "イデオロギー／信念"],
+          ["importantPeople", "重要な人々"],
+          ["meaningfulPlaces", "意味のある場所"],
+          ["treasuredPossessions", "秘蔵の品"],
+          ["traits", "特徴"],
+          ["equipment", "装備と所持品"],
+          ["notes", "セッションメモ"],
+        ] as const
+      )
+        .filter(([key]) => c[key])
+        .map(([key, label]) => (
+          <div className="print-note" key={key}>
+            <h3>{label}</h3>
+            <p>{c[key]}</p>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function PublicCharacter({ shareId }: { shareId: string }) {
+  const [data, setData] = useState<{
+    character: Character;
+    canEdit: boolean;
+  } | null>(null);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setData(null);
+    setError("");
+    void api<{ character: Character; canEdit: boolean }>(
+      `/api/public/characters/${encodeURIComponent(shareId)}`,
+      {
+        signal: AbortSignal.any([
+          controller.signal,
+          AbortSignal.timeout(15000),
+        ]),
+      },
+    )
+      .then((result) => {
+        if (!controller.signal.aborted) setData(result);
+      })
+      .catch((e: Error) => {
+        if (!controller.signal.aborted) setError(e.message);
+      });
+    return () => controller.abort();
+  }, [shareId, attempt]);
+  return (
+    <main className="public-sheet-page">
+      <header className="public-sheet-header">
+        <a href="/" aria-label="Arkhive トップへ">
+          <Logo />
+        </a>
+        <span>
+          <Eye size={16} /> 公開キャラクターシート · 閲覧専用
+        </span>
+      </header>
+      {error ? (
+        <div className="public-sheet-message" role="alert">
+          <h1>シートを表示できません</h1>
+          <p>{error}</p>
+          <button
+            className="button button-white"
+            onClick={() => setAttempt((n) => n + 1)}
+          >
+            再読み込み
+          </button>
+          <a className="button button-white" href="/">
+            トップへ
+          </a>
+        </div>
+      ) : !data ? (
+        <p role="status">シートを読み込んでいます…</p>
+      ) : (
+        <>
+          <div className="preview-actions">
+            {data.canEdit && (
+              <a
+                className="button button-white"
+                href={`/?character=${data.character.id}`}
+              >
+                管理者として編集
+              </a>
+            )}
+            <button
+              className="button button-primary"
+              onClick={() => window.print()}
+            >
+              <FileText size={15} /> 印刷 / PDF
+            </button>
+          </div>
+          <CharacterSheet
+            c={data.character}
+            portraitUrl={
+              data.character.image
+                ? `/api/public/characters/${encodeURIComponent(shareId)}/image?v=${data.character.image.version}`
+                : null
+            }
+          />
+        </>
+      )}
+    </main>
+  );
+}
+
 function App() {
   const [sheets, setSheets] = useState<Character[]>(initial);
   const [activeId, setActiveId] = useState(initial[0].id);
@@ -155,6 +331,12 @@ function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [menu, setMenu] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState<{
+    id: string;
+    shareId: string | null;
+  } | null>(null);
+  const [sharingBusy, setSharingBusy] = useState(false);
+  const [sharingError, setSharingError] = useState("");
   const [imageBusy, setImageBusy] = useState<string | null>(null);
   const [localError, setLocalError] = useState(false);
   const [legacyImported, setLegacyImported] = useState(false);
@@ -321,6 +503,70 @@ function App() {
     desktop.addEventListener("change", closeOnDesktop);
     return () => desktop.removeEventListener("change", closeOnDesktop);
   }, []);
+  useEffect(() => {
+    if (modal !== "sharing" || !user) return;
+    let live = true;
+    setSharing(null);
+    setSharingError("");
+    void (async () => {
+      try {
+        const response = await fetch(`/api/characters/${c.id}/sharing`, {
+          signal: AbortSignal.timeout(15000),
+        });
+        const result = (await response.json()) as {
+          shareId: string | null;
+          error?: string;
+        };
+        if (!response.ok && response.status !== 404)
+          throw new Error(result.error || "公開設定を取得できません");
+        if (live)
+          setSharing({
+            id: c.id,
+            shareId: response.status === 404 ? null : result.shareId,
+          });
+      } catch (e) {
+        if (live) setSharingError((e as Error).message);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [modal, user, c.id]);
+  async function changeSharing(enabled: boolean) {
+    if (!user || sharingBusy || saving || imageBusy) return;
+    if (enabled && errors.length) {
+      setSharingError(errors.join("・"));
+      return;
+    }
+    setSharingBusy(true);
+    setSharingError("");
+    try {
+      if (enabled) {
+        const saved = await api<Character>(`/api/characters/${c.id}`, {
+          method: "PUT",
+          body: JSON.stringify(c),
+        });
+        setSheets((xs) =>
+          xs.map((x) =>
+            x.id === saved.id && x.updatedAt === c.updatedAt ? saved : x,
+          ),
+        );
+      }
+      const result = await api<{ shareId: string | null }>(
+        `/api/characters/${c.id}/sharing`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ enabled }),
+        },
+      );
+      setSharing({ id: c.id, shareId: result.shareId });
+      notify(enabled ? "シートを公開しました" : "公開を停止しました");
+    } catch (e) {
+      setSharingError((e as Error).message);
+    } finally {
+      setSharingBusy(false);
+    }
+  }
   function update(patch: Partial<Character>) {
     setSheets((items) =>
       items.map((x) =>
@@ -959,7 +1205,7 @@ function App() {
                 <div className="archive-storage-note">
                   <Shield size={15} />
                   <span>
-                    探索者は非公開です。編集内容は端末に自動保存されます。
+                    公開範囲は探索者ごとに設定できます。編集内容は端末に自動保存されます。
                   </span>
                   {!user && (
                     <a href="/auth/discord">
@@ -1002,6 +1248,14 @@ function App() {
                   </div>
                 </div>
                 <div className="editor-actions">
+                  <button
+                    className="button button-white"
+                    onClick={() => openModal("sharing")}
+                    disabled={saving || !!imageBusy}
+                  >
+                    <Link2 size={16} />
+                    <span>公開設定</span>
+                  </button>
                   <button
                     className="edition-switch"
                     onClick={() => openModal("edition")}
@@ -1999,20 +2253,118 @@ function App() {
           title={
             modal === "new"
               ? "新しい探索者をつくる"
-              : modal === "mcp"
-                ? "MCP連携"
-                : modal === "preview"
-                  ? "探索者シート"
-                  : modal === "delete"
-                    ? "探索者を削除"
-                    : modal === "edition"
-                      ? "ルールの版を切り替える"
-                      : "使い方・サイトについて"
+              : modal === "sharing"
+                ? "キャラクターシートの公開設定"
+                : modal === "mcp"
+                  ? "MCP連携"
+                  : modal === "preview"
+                    ? "探索者シート"
+                    : modal === "delete"
+                      ? "探索者を削除"
+                      : modal === "edition"
+                        ? "ルールの版を切り替える"
+                        : "使い方・サイトについて"
           }
           onClose={() => setModal(null)}
           wide={modal === "preview"}
           returnFocus={modalTrigger.current}
         >
+          {modal === "sharing" && (
+            <>
+              <p className="modal-description">
+                公開すると、URLを知っている人はログインなしでシート全体（画像・プレイヤー名・メモを含む）を閲覧できます。編集と公開設定の変更は管理者だけが行えます。
+              </p>
+              {!user ? (
+                <div className="info-note">
+                  公開するには<a href="/auth/discord">Discordでログイン</a>
+                  してください。
+                </div>
+              ) : (
+                <>
+                  {sharingError && (
+                    <p role="alert" className="sharing-error">
+                      {sharingError}
+                    </p>
+                  )}
+                  {sharing?.id === c.id ? (
+                    <>
+                      <p className="sharing-status">
+                        現在：{sharing.shareId ? "公開中" : "非公開"}
+                      </p>
+                      {sharing.shareId ? (
+                        <>
+                          <label className="sharing-url">
+                            公開URL
+                            <input
+                              readOnly
+                              value={`${location.origin}/shared/${sharing.shareId}`}
+                              onFocus={(e) => e.target.select()}
+                            />
+                          </label>
+                          <div className="sharing-actions">
+                            <button
+                              className="button button-white"
+                              onClick={() => {
+                                void navigator.clipboard
+                                  .writeText(
+                                    `${location.origin}/shared/${sharing.shareId}`,
+                                  )
+                                  .then(() => notify("公開URLをコピーしました"))
+                                  .catch(() =>
+                                    notify(
+                                      "URLを選択してコピーしてください",
+                                      "error",
+                                    ),
+                                  );
+                              }}
+                            >
+                              <Link2 size={15} />
+                              URLをコピー
+                            </button>
+                            <a
+                              className="button button-white"
+                              href={`/shared/${sharing.shareId}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              公開ページを開く
+                            </a>
+                          </div>
+                          <p className="modal-description">
+                            クラウドに保存した内容が公開ページに反映されます。公開停止後はこのURLと画像を閲覧できなくなり、再公開時には新しいURLが発行されます。
+                          </p>
+                          <button
+                            className="button button-white modal-primary"
+                            disabled={sharingBusy || saving || !!imageBusy}
+                            onClick={() => void changeSharing(false)}
+                          >
+                            {sharingBusy ? "変更中…" : "公開を停止する"}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <p className="modal-description">
+                            現在の内容をクラウドに保存して公開します。
+                          </p>
+                          <button
+                            className="button button-primary modal-primary"
+                            disabled={sharingBusy || saving || !!imageBusy}
+                            onClick={() => void changeSharing(true)}
+                          >
+                            {sharingBusy ? "公開中…" : "保存して公開する"}
+                          </button>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    !sharingError && (
+                      <p role="status">公開設定を読み込んでいます…</p>
+                    )
+                  )}
+                </>
+              )}
+            </>
+          )}
           {modal === "new" && (
             <>
               <p className="modal-description">
@@ -2284,81 +2636,7 @@ function App() {
                   印刷 / PDF
                 </button>
               </div>
-              <div className="print-sheet">
-                <div className="print-title">
-                  <Logo />
-                  <span>クトゥルフ神話TRPG 第{c.edition}版</span>
-                </div>
-                {portraitUrl && (
-                  <img
-                    className="print-portrait"
-                    src={portraitUrl}
-                    alt={`${c.name || "探索者"}の画像`}
-                  />
-                )}
-                <h2>{c.name || "名前のない探索者"}</h2>
-                <p>
-                  {c.occupation || "職業未設定"} · {c.age}歳 · {c.gender} ·
-                  プレイヤー：{c.player || "未設定"}
-                </p>
-                <p>
-                  出身：{c.birthplace || "—"} ／ 住所：{c.residence || "—"}
-                </p>
-                <div className="print-stats">
-                  {statKeys.map((k) => (
-                    <div key={k}>
-                      <span>{k}</span>
-                      <b>{c.stats[k]}</b>
-                      {c.edition === "7" && (
-                        <small>
-                          {Math.floor(c.stats[k] / 2)} /{" "}
-                          {Math.floor(c.stats[k] / 5)}
-                        </small>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="print-vitals">
-                  HP {c.currentHP ?? d.hp}/{d.hp}　MP {c.currentMP ?? d.mp}/
-                  {d.mp}　SAN {c.currentSAN ?? d.san}/{d.maxSAN}　幸運 {d.luck}
-                  　DB {d.db}
-                  {c.edition === "7" && `　ビルド ${d.build}　MOV ${d.mov}`}
-                </div>
-                <h3>技能</h3>
-                <div className="print-skills">
-                  {sortSkills(c.skills).map((s) => (
-                    <div key={s.id}>
-                      <span>{skillName(s)}</span>
-                      <b>{skillTotal(s, c)}%</b>
-                      {c.edition === "7" && (
-                        <small>
-                          {Math.floor(skillTotal(s, c) / 2)} /{" "}
-                          {Math.floor(skillTotal(s, c) / 5)}
-                        </small>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {(
-                  [
-                    ["appearance", "容姿の描写"],
-                    ["belief", "イデオロギー／信念"],
-                    ["importantPeople", "重要な人々"],
-                    ["meaningfulPlaces", "意味のある場所"],
-                    ["treasuredPossessions", "秘蔵の品"],
-                    ["traits", "特徴"],
-                    ["equipment", "装備と所持品"],
-                    ["notes", "セッションメモ"],
-                  ] as const
-                )
-                  .filter(([key]) => c[key])
-                  .map(([key, label]) => (
-                    <div className="print-note" key={key}>
-                      <h3>{label}</h3>
-                      <p>{c[key]}</p>
-                    </div>
-                  ))}
-              </div>
+              <CharacterSheet c={c} portraitUrl={portraitUrl} />
             </>
           )}
         </ModalFrame>
@@ -2641,4 +2919,10 @@ function ModalFrame({
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  publicShareId !== null ? (
+    <PublicCharacter shareId={publicShareId} />
+  ) : (
+    <App />
+  ),
+);

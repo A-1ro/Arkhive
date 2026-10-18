@@ -194,6 +194,7 @@ beforeAll(async () => {
     "0001_initial.sql",
     "0002_mcp_oauth.sql",
     "0003_character_images.sql",
+    "0004_character_sharing.sql",
   ]) {
     const sql = await readFile(
       new URL(`../migrations/${migration}`, import.meta.url),

@@ -11,6 +11,7 @@ import { handleMcp } from "./mcp";
 import legacy from "./legacy";
 import { legacyOrigins } from "../shared/origins";
 import { characterImageKey, images } from "./images";
+import { sharing, publicCharacters } from "./sharing";
 
 const app = new Hono<Env>();
 const mcpOrigins = [
@@ -121,10 +122,12 @@ app.use("/api/characters*", async (c, next) => {
     return c.json({ error: "Discordログインが必要です" }, 401);
   await next();
 });
+app.route("/api/public/characters", publicCharacters);
 app.get("/api/characters", async (c) =>
   c.json(await listCharacters(c.env.DB, c.get("user")!.id)),
 );
 app.route("/api/characters", images);
+app.route("/api/characters", sharing);
 app.get("/api/characters/:id", async (c) => {
   const row = await getCharacter(
     c.env.DB,
@@ -240,7 +243,12 @@ app.get("*", async (c) => {
   }
   const response = await c.env.ASSETS.fetch(c.req.raw);
   // Asset responses have immutable headers; middleware needs a mutable copy.
-  return new Response(response.body, response);
+  const result = new Response(response.body, response);
+  if (c.req.path.startsWith("/shared/")) {
+    result.headers.set("Cache-Control", "no-store");
+    result.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  }
+  return result;
 });
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 export default app;

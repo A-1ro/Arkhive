@@ -46,6 +46,7 @@ beforeAll(async () => {
     "0001_initial.sql",
     "0002_mcp_oauth.sql",
     "0003_character_images.sql",
+    "0004_character_sharing.sql",
   ]) {
     const sql = await readFile(
       new URL(`../migrations/${migration}`, import.meta.url),
@@ -104,6 +105,167 @@ const imageRequest = (
     },
     proxy.env,
   );
+
+describe("public character sharing", () => {
+  const share = (
+    id: string,
+    enabled: boolean,
+    cookie = firstToken,
+    headers = {},
+  ) =>
+    request(
+      `/api/characters/${id}/sharing`,
+      "PUT",
+      { enabled },
+      cookie,
+      headers,
+    );
+  const publicRead = (id: string, suffix = "", cookie = "") =>
+    request(`/api/public/characters/${id}${suffix}`, "GET", undefined, cookie);
+
+  it("defaults to private and allows only the owner to publish", async () => {
+    const c = newCharacter();
+    await request(`/api/characters/${c.id}`, "PUT", { ...c, share_id: c.id });
+    expect(
+      await (await request(`/api/characters/${c.id}/sharing`)).json(),
+    ).toEqual({ shareId: null });
+    expect((await publicRead(c.id)).status).toBe(404);
+    expect((await share(c.id, true, "")).status).toBe(401);
+    expect((await share(c.id, true, secondToken)).status).toBe(404);
+    expect(
+      (
+        await request(
+          `/api/characters/${c.id}/sharing`,
+          "GET",
+          undefined,
+          secondToken,
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await share(c.id, true, firstToken, { Origin: "https://evil.test" }))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await request(`/api/characters/${c.id}/sharing`, "PUT", {
+          enabled: "true",
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(`/api/characters/${c.id}/sharing`, "PUT", {
+          enabled: true,
+          shareId: c.id,
+        })
+      ).status,
+    ).toBe(400);
+    await request(`/api/characters/${c.id}`, "DELETE");
+  });
+
+  it("serves saved sheets and images without login while rejecting all non-owner edits", async () => {
+    const c = newCharacter("7");
+    c.name = "公開探索者";
+    c.notes = "公開メモ";
+    await request(`/api/characters/${c.id}`, "PUT", c);
+    await imageRequest(c.id);
+    const published = await share(c.id, true);
+    expect(published.status).toBe(200);
+    const { shareId } = (await published.json()) as { shareId: string };
+    expect(shareId).not.toBe(c.id);
+    expect(await (await share(c.id, true)).json()).toEqual({ shareId });
+    for (const cookie of ["", secondToken, firstToken]) {
+      const response = await publicRead(shareId, "", cookie);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Cache-Control")).toContain("no-store");
+      expect(response.headers.get("X-Robots-Tag")).toContain("noindex");
+      expect(await response.json()).toMatchObject({
+        character: { id: c.id, name: c.name, notes: c.notes },
+        canEdit: cookie === firstToken,
+      });
+      const image = await publicRead(shareId, "/image", cookie);
+      expect(image.status).toBe(200);
+      expect(image.headers.get("Cache-Control")).toContain("no-store");
+      expect(Buffer.from(await image.arrayBuffer())).toEqual(opaqueWebp);
+    }
+    expect(
+      (await request(`/api/characters/${c.id}`, "PUT", c, "")).status,
+    ).toBe(401);
+    expect(
+      (await request(`/api/characters/${c.id}`, "PUT", c, secondToken)).status,
+    ).toBe(400);
+    expect((await imageRequest(c.id, alphaWebp, secondToken)).status).toBe(404);
+    expect(
+      (
+        await request(
+          `/api/characters/${c.id}/image`,
+          "DELETE",
+          undefined,
+          secondToken,
+        )
+      ).status,
+    ).toBe(404);
+    expect((await share(c.id, false, secondToken)).status).toBe(404);
+    await request(`/api/characters/${c.id}`, "DELETE", undefined, secondToken);
+    for (const method of ["PUT", "POST", "DELETE"]) {
+      expect(
+        (
+          await request(
+            `/api/public/characters/${shareId}`,
+            method,
+            c,
+            secondToken,
+          )
+        ).status,
+      ).toBe(404);
+      expect(
+        (
+          await request(
+            `/api/public/characters/${shareId}/image`,
+            method,
+            c,
+            secondToken,
+          )
+        ).status,
+      ).toBe(404);
+    }
+    c.name = "更新後";
+    await request(`/api/characters/${c.id}`, "PUT", c);
+    expect(await (await publicRead(shareId)).json()).toMatchObject({
+      character: { name: c.name, image: { size: opaqueWebp.length } },
+    });
+    await share(c.id, false);
+    expect((await publicRead(shareId)).status).toBe(404);
+    expect((await publicRead(shareId, "/image")).status).toBe(404);
+    // A stale JSON save cannot restore public access.
+    await request(`/api/characters/${c.id}`, "PUT", { ...c, shareId });
+    expect((await publicRead(shareId)).status).toBe(404);
+    const next = (await (await share(c.id, true)).json()) as {
+      shareId: string;
+    };
+    expect(next.shareId).not.toBe(shareId);
+    expect((await publicRead(shareId)).status).toBe(404);
+    expect((await publicRead(next.shareId)).status).toBe(200);
+    await request(`/api/characters/${c.id}/image`, "DELETE");
+    expect((await publicRead(next.shareId, "/image")).status).toBe(404);
+    await request(`/api/characters/${c.id}`, "DELETE");
+    expect((await publicRead(next.shareId)).status).toBe(404);
+    expect((await publicRead(next.shareId, "/image")).status).toBe(404);
+  });
+
+  it("returns an unindexed public page and hides invalid public IDs", async () => {
+    for (const id of [crypto.randomUUID(), "invalid", "null"]) {
+      expect((await publicRead(id)).status).toBe(404);
+      expect((await publicRead(id, "/image")).status).toBe(404);
+    }
+    const response = await request(`/shared/${crypto.randomUUID()}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Robots-Tag")).toContain("noindex");
+    expect(response.headers.get("Cache-Control")).toContain("no-store");
+    expect(await response.text()).toContain("Arkhive");
+  });
+});
 
 describe("private R2 character images", () => {
   it.each([canvasSrgbWebp, canvasP3Webp])(
