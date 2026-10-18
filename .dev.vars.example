@@ -1,0 +1,4 @@
+DISCORD_CLIENT_ID=""
+DISCORD_CLIENT_SECRET=""
+# Production: https://YOUR-WORKER.workers.dev/auth/discord/callback
+DISCORD_REDIRECT_URI="http://localhost:5173/auth/discord/callback"
