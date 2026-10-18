@@ -63,6 +63,7 @@ import {
 import "./style.css";
 import { compressImage } from "./client/compress-image";
 import { NumberInput } from "./client/NumberInput";
+import { PublicSheet } from "./client/PublicSheet";
 import { imageUrl } from "./shared/images";
 import {
   legacyImportKey,
@@ -282,24 +283,9 @@ function PublicCharacter({ shareId }: { shareId: string }) {
         <p role="status">シートを読み込んでいます…</p>
       ) : (
         <>
-          <div className="preview-actions">
-            {data.canEdit && (
-              <a
-                className="button button-white"
-                href={`/?character=${data.character.id}`}
-              >
-                管理者として編集
-              </a>
-            )}
-            <button
-              className="button button-primary"
-              onClick={() => window.print()}
-            >
-              <FileText size={15} /> 印刷 / PDF
-            </button>
-          </div>
-          <CharacterSheet
+          <PublicSheet
             c={data.character}
+            canEdit={data.canEdit}
             portraitUrl={
               data.character.image
                 ? `/api/public/characters/${encodeURIComponent(shareId)}/image?v=${data.character.image.version}`

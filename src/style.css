@@ -2255,9 +2255,9 @@ h1 {
   color: var(--gold);
 }
 
-/* Print preview keeps a paper palette, independently of the workspace theme. */
+/* Public sheets share the workspace palette and card treatments. */
 .public-sheet-page {
-  max-width: 980px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 24px 16px;
 }
@@ -2274,6 +2274,372 @@ h1 {
   align-items: center;
   gap: 8px;
   font-size: 12px;
+  color: var(--muted);
+}
+.public-sheet-header > span svg {
+  color: var(--gold);
+}
+.public-sheet-content {
+  display: grid;
+  gap: 24px;
+}
+.public-card {
+  min-width: 0;
+  padding: var(--panel-padding);
+  border-radius: var(--radius);
+}
+.public-profile {
+  border-top: 2px solid var(--gold);
+}
+.public-profile-heading,
+.public-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.public-profile-heading {
+  justify-content: flex-start;
+  margin-bottom: 24px;
+}
+.public-profile-heading > a {
+  margin-left: auto;
+}
+.public-caption {
+  color: var(--muted);
+  font-size: 11px;
+}
+.public-profile-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
+}
+.public-portrait {
+  width: 148px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+}
+.public-portrait img {
+  width: 100%;
+  max-height: 230px;
+  object-fit: contain;
+}
+.public-portrait-empty {
+  display: grid;
+  place-items: center;
+  height: 180px;
+  color: var(--gold);
+  background: var(--gold-soft);
+}
+.public-profile-details {
+  min-width: 0;
+  flex: 1;
+}
+.public-eyebrow {
+  margin: 0 0 6px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--gold);
+}
+.public-profile-details h1 {
+  margin: 0;
+  font-size: clamp(23px, 3vw, 32px);
+  line-height: 1.5;
+}
+.public-occupation {
+  margin: 7px 0 20px;
+  color: var(--text-secondary);
+}
+.public-profile-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin: 0;
+}
+.public-profile-facts dt,
+.public-secondary-stats dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.public-profile-facts dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.public-section-heading {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.public-section-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 16px;
+}
+.public-section-heading h2 svg {
+  color: var(--gold);
+}
+.public-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0;
+}
+.public-stats-grid > div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  padding: 14px 6px;
+  text-align: center;
+}
+.public-stats-grid dt {
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+.public-stats-grid dt span {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.public-stats-grid dd {
+  margin: 10px 0 0;
+}
+.public-stats-grid strong {
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.public-stats-grid small {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 10px;
+  margin-top: 6px;
+}
+.public-vitals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.public-vitals-grid > div {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--gold-soft);
+}
+.public-vitals-grid dt {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.public-vitals-grid dt svg {
+  color: var(--gold);
+}
+.public-vitals-grid dd {
+  margin: 8px 0 0;
+  font-size: 24px;
+}
+.public-vitals-grid small {
+  font-size: 13px;
+  color: var(--muted);
+}
+.public-secondary-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 20px 0 0;
+}
+.public-secondary-stats > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.public-secondary-stats dd {
+  margin: 0;
+  font-size: 14px;
+}
+.public-skill-filter {
+  display: inline-flex;
+  flex-wrap: wrap;
+  padding: 4px;
+  gap: 4px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.public-skill-filter button {
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+.public-skill-filter button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.public-skill-filter button[aria-pressed="true"] {
+  color: var(--gold);
+  background: var(--gold-soft);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.public-skills-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.public-skills-caption p {
+  margin: 0;
+}
+.public-skills-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+.public-skills-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.public-skills-table th,
+.public-skills-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.public-skills-table th:first-child {
+  width: 48%;
+  text-align: left;
+}
+.public-skills-table thead th {
+  background: var(--bg-deep);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+.public-skills-table thead span {
+  display: block;
+  font-size: 11px;
+  margin-top: 3px;
+}
+.public-skills-table tbody th {
+  font-weight: 400;
+}
+.public-skills-table td {
+  color: var(--text-secondary);
+}
+.public-skills-table td strong {
+  color: var(--gold);
+  font-size: 16px;
+  font-weight: 500;
+}
+.public-skills-table td small {
+  font-size: 10px;
+  margin-left: 2px;
+}
+.public-trained-mark {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--gold);
+  margin: 0 0 2px 8px;
+}
+.public-skills-empty {
+  text-align: center;
+  padding: 32px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.public-notes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.public-notes-grid:empty {
+  display: none;
+}
+.public-note-wide {
+  grid-column: 1 / -1;
+}
+.public-note-text {
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 2;
+  margin: 16px 0 0;
+}
+@media (max-width: 760px) {
+  .public-sheet-page {
+    padding: 20px 14px;
+  }
+  .public-sheet-content,
+  .public-notes-grid {
+    gap: 16px;
+  }
+  .public-card {
+    padding: 20px 16px;
+  }
+  .public-profile-body {
+    gap: 18px;
+  }
+  .public-portrait {
+    width: 100px;
+  }
+  .public-portrait-empty {
+    height: 128px;
+  }
+  .public-profile-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .public-stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .public-vitals-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .public-skills-table th,
+  .public-skills-table td {
+    padding: 12px 6px;
+  }
+  .public-skills-table th:first-child {
+    width: 40%;
+  }
+  .public-notes-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 420px) {
+  .public-profile-body {
+    flex-direction: column;
+  }
+  .public-profile-details {
+    width: 100%;
+  }
 }
 .public-sheet-message {
   padding: 28px 0;
@@ -2299,6 +2665,7 @@ h1 {
 .sharing-error {
   color: var(--danger, #e99a8e);
 }
+/* Print preview keeps a paper palette, independently of the workspace theme. */
 .print-sheet {
   --paper-text: #293a35;
   --paper-muted: #526159;
@@ -3269,15 +3636,6 @@ h1 {
   }
   body > *:not(#root),
   #root > *:not(.modal-overlay) {
-    display: none !important;
-  }
-  #root > .public-sheet-page {
-    display: block !important;
-    max-width: none;
-    margin: 0;
-    padding: 0;
-  }
-  .public-sheet-header {
     display: none !important;
   }
   .modal-overlay {
