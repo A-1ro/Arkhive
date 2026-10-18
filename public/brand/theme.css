@@ -1,0 +1,54 @@
+/* Shared by the workspace and the OAuth consent page. */
+:root {
+  color-scheme: dark;
+  --bg: #102b2b;
+  --bg-deep: #0b2020;
+  --bg-secondary: #171923;
+  --surface: #153232;
+  --surface-raised: #1a3a39;
+  --surface-hover: #214443;
+  --input: #102a2a;
+  --gold: #c5a46d;
+  --gold-hover: #ddbd87;
+  --gold-soft: #c5a46d12;
+  --text: #e8dfcb;
+  --text-secondary: #b7c3b9;
+  --muted: #9baea4;
+  --placeholder: #8b9e95;
+  --line: #91ab9b26;
+  --line-strong: #91ab9b50;
+  --success: #8fc7aa;
+  --success-soft: #8fc7aa12;
+  --danger: #f1a29b;
+  --danger-soft: #f1a29b12;
+  --warning: #e8bd77;
+  --info: #9dbdd9;
+  --shadow: 0 12px 30px #00000014;
+  --radius: 12px;
+  --radius-sm: 7px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --sidebar-width: 240px;
+  --panel-padding: 24px;
+  --ease: 160ms ease;
+  font-family:
+    "Noto Sans JP",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Hiragino Kaku Gothic ProN",
+    Meiryo,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}

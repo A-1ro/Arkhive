@@ -270,52 +270,128 @@ oauth.get("/oauth/authorize", async (c) => {
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width,initial-scale=1" />
           <title>MCP連携の許可 | Arkhive</title>
+          <meta name="theme-color" content="#102B2B" />
+          <link rel="icon" type="image/png" href="/favicon.png" />
+          <link rel="stylesheet" href="/brand/theme.css" />
           <style>
+            * {
+              box-sizing: border-box;
+            }
             body {
-              font-family: system-ui, sans-serif;
-              background: #f5f3f8;
-              color: #332b42;
               margin: 0;
-              padding: 32px 20px;
+              padding: 24px 16px;
             }
             main {
-              max-width: 480px;
-              margin: 8vh auto;
-              background: white;
+              max-width: 500px;
+              margin: 7vh auto;
+              background: var(--surface);
               padding: 32px;
-              border-radius: 16px;
-              box-shadow: 0 8px 36px #332b4212;
+              border: 1px solid var(--line-strong);
+              border-radius: var(--radius);
+              box-shadow: var(--shadow);
+            }
+            .brand {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              padding-bottom: 24px;
+              margin-bottom: 26px;
+              border-bottom: 1px solid var(--line);
+            }
+            .brand img {
+              width: 48px;
+              height: 48px;
+              border-radius: 8px;
+              border: 1px solid var(--line-strong);
+            }
+            .brand span {
+              font-family: Georgia, serif;
+              font-size: 27px;
+              letter-spacing: 1px;
+            }
+            .brand small {
+              display: block;
+              font: 8px sans-serif;
+              letter-spacing: 1.3px;
+              color: var(--gold);
+              margin-top: 5px;
             }
             h1 {
-              font-size: 22px;
+              font-size: 21px;
+              font-weight: 500;
+              line-height: 1.6;
             }
             p {
-              line-height: 1.8;
+              font-size: 13px;
+              line-height: 1.9;
+              color: var(--text-secondary);
+            }
+            strong {
+              color: var(--text);
             }
             code {
               overflow-wrap: anywhere;
+              color: var(--gold);
+              font-size: 12px;
             }
             small {
-              color: #635875;
+              color: var(--muted);
             }
             button {
               font: inherit;
-              border: 0;
-              border-radius: 8px;
+              font-size: 13px;
+              border: 1px solid var(--line-strong);
+              border-radius: var(--radius-sm);
               padding: 12px 16px;
+              min-height: 46px;
               cursor: pointer;
               margin: 8px 8px 0 0;
-              background: #eee9f5;
+              background: var(--input);
+              color: var(--text-secondary);
+              transition: background var(--ease);
+            }
+            button:hover {
+              background: var(--surface-hover);
             }
             button[value="allow"] {
-              background: #725293;
-              color: white;
+              background: var(--gold);
+              color: var(--bg-deep);
+              border-color: var(--gold);
+            }
+            button[value="allow"]:hover {
+              background: var(--gold-hover);
+            }
+            button:focus-visible {
+              outline: 2px solid var(--gold);
+              outline-offset: 4px;
+            }
+            @media (max-width: 540px) {
+              main {
+                margin: 24px auto;
+                padding: 24px 20px;
+              }
+              h1 {
+                font-size: 19px;
+              }
+              button {
+                width: 100%;
+                margin-right: 0;
+              }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              button {
+                transition: none;
+              }
             }
           </style>
         </head>
         <body>
           <main>
-            <small>Arkhive 探索者ノート</small>
+            <div class="brand">
+              <img src="/brand/arkhive.png" alt="" /><span
+                >Arkhive<small>探索者ノート</small></span
+              >
+            </div>
             <h1>MCP連携を許可しますか？</h1>
             <p>
               接続元の表示名：<strong>${client.name}</strong><br /><small

@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowDownToLine,
+  ArrowLeft,
+  Archive,
+  SlidersHorizontal,
   ArrowRight,
   BookOpen,
   Check,
@@ -99,15 +102,7 @@ function Logo({ small = false }: { small?: boolean }) {
   return (
     <div className={`brand ${small ? "brand-small" : ""}`}>
       <span className="brand-mark">
-        <svg viewBox="0 0 40 40" fill="none">
-          <path
-            d="M8 30 20 10l12 20M12 24h16"
-            stroke="currentColor"
-            strokeWidth="2.3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <img src="/brand/arkhive.png" alt="" width="48" height="48" />
       </span>
       {!small && (
         <span>
@@ -145,6 +140,14 @@ function App() {
   const [sheets, setSheets] = useState<Character[]>(initial);
   const [activeId, setActiveId] = useState(initial[0].id);
   const [tab, setTab] = useState("profile");
+  const [view, setView] = useState<"archive" | "editor">(
+    new URLSearchParams(location.search).has("character")
+      ? "editor"
+      : "archive",
+  );
+  const [archiveSearch, setArchiveSearch] = useState("");
+  const [editionFilter, setEditionFilter] = useState("all");
+  const [archiveSort, setArchiveSort] = useState("updated");
   const [modal, setModal] = useState<Modal>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
@@ -166,6 +169,7 @@ function App() {
   >([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
+  const modalTrigger = useRef<HTMLElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const c = sheets.find((x) => x.id === activeId) || sheets[0];
   const portraitUrl = user && c.image ? imageUrl(c.id, c.image.version) : null;
@@ -175,6 +179,10 @@ function App() {
   const usedOp = c.skills.reduce((n, s) => n + s.occupation, 0),
     usedIp = c.skills.reduce((n, s) => n + s.interest, 0);
   const errors = validateAllocation(c);
+  function openModal(next: Exclude<Modal, null>) {
+    modalTrigger.current = document.activeElement as HTMLElement | null;
+    setModal(next);
+  }
   function notify(text: string, kind: Toast["kind"] = "ok") {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ text, kind });
@@ -223,7 +231,7 @@ function App() {
     })();
     const auth = new URLSearchParams(location.search).get("auth");
     if (auth === "setup") {
-      setModal("help");
+      openModal("help");
     }
     if (auth === "failed")
       notify("Discord認証に失敗しました。もう一度お試しください。", "error");
@@ -273,6 +281,46 @@ function App() {
       document.body.style.overflow = old;
     };
   }, [modal]);
+  useEffect(() => {
+    if (!menu) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const sidebar = document.getElementById("workspace-navigation");
+    sidebar?.querySelector<HTMLButtonElement>(".sidebar-close")?.focus();
+    const old = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(false);
+      if (e.key !== "Tab" || !sidebar) return;
+      const items = Array.from(
+        sidebar.querySelectorAll<HTMLElement>("button:not([disabled]),a[href]"),
+      ).filter((el) => el.getClientRects().length);
+      const first = items[0],
+        last = items.at(-1);
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = old;
+      document.removeEventListener("keydown", onKey);
+      if (window.matchMedia("(max-width: 760px)").matches)
+        document.querySelector<HTMLButtonElement>(".mobile-menu")?.focus();
+      else previous?.focus();
+    };
+  }, [menu]);
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 761px)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) setMenu(false);
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
   function update(patch: Partial<Character>) {
     setSheets((items) =>
       items.map((x) =>
@@ -308,6 +356,7 @@ function App() {
     const character = newCharacter(edition);
     setSheets((xs) => [character, ...xs]);
     setActiveId(character.id);
+    setView("editor");
     setTab("profile");
     setModal(null);
     setMenu(false);
@@ -315,7 +364,7 @@ function App() {
   }
   async function save() {
     if (!user) {
-      setModal("help");
+      openModal("help");
       return;
     }
     if (errors.length) {
@@ -443,6 +492,7 @@ function App() {
       parsed.updatedAt = new Date().toISOString();
       setSheets((xs) => [parsed, ...xs]);
       setActiveId(parsed.id);
+      setView("editor");
       setTab("profile");
       notify("探索者を読み込みました");
     } catch {
@@ -514,42 +564,79 @@ function App() {
     !!(c.appearance || c.belief || c.notes),
     !!c.equipment,
   ].filter(Boolean).length;
+  const archiveSheets = sheets
+    .filter(
+      (sheet) =>
+        (editionFilter === "all" || sheet.edition === editionFilter) &&
+        `${sheet.name} ${sheet.occupation} ${sheet.player}`
+          .toLocaleLowerCase()
+          .includes(archiveSearch.trim().toLocaleLowerCase()),
+    )
+    .sort((a, b) =>
+      archiveSort === "name"
+        ? a.name.localeCompare(b.name, "ja")
+        : b.updatedAt.localeCompare(a.updatedAt),
+    );
   return (
     <>
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
-      <div className="noise" />
-      <aside className={`sidebar ${menu ? "sidebar-open" : ""}`}>
-        <a href="/" className="logo-link" aria-label="Arkhive ホーム">
-          <Logo />
-        </a>
-        <div className="workspace-label">YOUR WORKSPACE</div>
+      <a className="skip-link" href="#main-content">
+        本文へ移動
+      </a>
+      <aside
+        id="workspace-navigation"
+        className={`sidebar ${menu ? "sidebar-open" : ""}`}
+        aria-label="ワークスペース"
+        inert={!!modal}
+      >
         <button
-          className="nav-item nav-active"
+          className="logo-link"
+          aria-label="Arkhive 探索者一覧"
+          onClick={() => {
+            setView("archive");
+            setMenu(false);
+          }}
+        >
+          <Logo />
+        </button>
+        <button
+          className="icon-button sidebar-close"
+          aria-label="メニューを閉じる"
+          onClick={() => setMenu(false)}
+        >
+          <X size={20} />
+        </button>
+        <div className="workspace-label">ワークスペース</div>
+        <button
+          className={`nav-item ${view === "archive" ? "nav-active" : ""}`}
+          aria-current={view === "archive" ? "page" : undefined}
           onClick={() => {
             setMenu(false);
-            setTab("profile");
+            setView("archive");
           }}
         >
           <Layers3 size={18} />
-          探索者ノート<span className="nav-count">{sheets.length}</span>
+          探索者一覧<span className="nav-count">{sheets.length}</span>
         </button>
         <button
           className="nav-item"
           onClick={() => {
-            setModal("mcp");
+            openModal("mcp");
             setMenu(false);
           }}
         >
           <Code2 size={18} />
-          MCP連携<span className="new-pill">NEW</span>
+          MCP連携
+          <ArrowRight className="nav-trailing" size={14} />
         </button>
         <div className="sidebar-section">
           <span>マイ探索者</span>
           <button
             className="icon-button"
             aria-label="探索者を追加"
-            onClick={() => setModal("new")}
+            onClick={() => {
+              setMenu(false);
+              openModal("new");
+            }}
           >
             <Plus size={16} />
           </button>
@@ -560,10 +647,14 @@ function App() {
               key={s.id}
               onClick={() => {
                 setActiveId(s.id);
+                setView("editor");
                 setTab("profile");
                 setMenu(false);
               }}
-              className={`sheet-item ${s.id === c.id ? "sheet-selected" : ""}`}
+              aria-current={
+                view === "editor" && s.id === c.id ? "page" : undefined
+              }
+              className={`sheet-item ${view === "editor" && s.id === c.id ? "sheet-selected" : ""}`}
             >
               <span className="sheet-avatar">
                 <UserRound size={16} />
@@ -574,21 +665,37 @@ function App() {
                   第{s.edition}版 · {s.occupation || "職業未設定"}
                 </small>
               </span>
-              {s.id === c.id && <span className="selected-dot" />}
+              {view === "editor" && s.id === c.id && (
+                <span className="selected-dot" />
+              )}
             </button>
           ))}
         </div>
-        <button className="add-note" onClick={() => setModal("new")}>
+        <button
+          className="add-note"
+          onClick={() => {
+            setMenu(false);
+            openModal("new");
+          }}
+        >
           <Plus size={16} />
           新しい探索者を作成
         </button>
         <div className="sidebar-bottom">
-          <button className="nav-item" onClick={() => setModal("help")}>
+          <button
+            className="nav-item"
+            onClick={() => {
+              setMenu(false);
+              openModal("help");
+            }}
+          >
             <CircleHelp size={17} />
             使い方・このサイトについて
           </button>
           <div className="sidebar-foot">
-            <span className="status-dot" />{" "}
+            <span
+              className={`status-dot ${localError ? "status-error" : ""}`}
+            />{" "}
             {localError ? "端末保存の空き容量を確認" : "端末に自動保存"}
           </div>
         </div>
@@ -600,22 +707,35 @@ function App() {
           onClick={() => setMenu(false)}
         />
       )}
-      <div className="app-shell">
+      <div className="app-shell" inert={menu || !!modal}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
               className="icon-button mobile-menu"
               aria-label="メニューを開く"
+              aria-expanded={menu}
+              aria-controls="workspace-navigation"
               onClick={() => setMenu(true)}
             >
               <Menu size={21} />
             </button>
-            <span>ワークスペース</span>
-            <ChevronRight size={14} />
-            <strong>探索者をつくる</strong>
+            <span className="mobile-brand">
+              <Logo small />
+            </span>
+            <Archive size={16} className="breadcrumb-icon" />
+            <button
+              className="breadcrumb-home"
+              onClick={() => setView("archive")}
+            >
+              記録庫
+            </button>
+            <ChevronRight size={13} />
+            <strong>
+              {view === "archive" ? "探索者一覧" : c.name || "新しい探索者"}
+            </strong>
           </div>
           <div className="topbar-right">
-            <span className="save-status">
+            <span className="save-status" role="status">
               <span
                 className={`status-dot ${localError ? "status-error" : ""}`}
               />
@@ -645,892 +765,1185 @@ function App() {
             )}
           </div>
         </header>
-        <main>
-          <div className="page-heading">
-            <div>
-              <h1>探索者を作成</h1>
-            </div>
-            <button
-              className="button button-white new-button"
-              onClick={() => setModal("new")}
-            >
-              <Plus size={17} />
-              新規作成
-            </button>
-          </div>
-          <div className="editor-top">
-            <div className="editor-title">
-              <span className="editor-icon">
-                <FileText size={20} />
-              </span>
-              <div>
-                <h2>{c.name || "新しい探索者"}</h2>
-                <span>
-                  CHARACTER SHEET <span className="mid-dot">·</span>{" "}
-                  {c.name ? "編集中" : "下書き"}
-                </span>
+        <main id="main-content" className={`workspace-${view}`} tabIndex={-1}>
+          {view === "archive" ? (
+            <>
+              <div className="page-heading archive-heading">
+                <div>
+                  <h1>探索者一覧</h1>
+                </div>
+                <button
+                  className="button button-primary"
+                  onClick={() => openModal("new")}
+                >
+                  <Plus size={18} />
+                  新しい探索者
+                </button>
               </div>
-            </div>
-            <div className="editor-actions">
-              <button
-                className="edition-switch"
-                onClick={() => setModal("edition")}
+              <div className="archive-overview">
+                <div>
+                  <span className="overview-icon">
+                    <Layers3 size={21} />
+                  </span>
+                  <div>
+                    <span>すべての探索者</span>
+                    <strong>
+                      {sheets.length.toString().padStart(2, "0")}
+                      <small>件</small>
+                    </strong>
+                  </div>
+                </div>
+                <div>
+                  <span className="overview-icon">
+                    <BookOpen size={21} />
+                  </span>
+                  <div>
+                    <span>新クトゥルフ神話TRPG</span>
+                    <strong>
+                      {sheets
+                        .filter((s) => s.edition === "7")
+                        .length.toString()
+                        .padStart(2, "0")}
+                      <small>第7版</small>
+                    </strong>
+                  </div>
+                </div>
+                <div>
+                  <span className="overview-icon">
+                    <Archive size={21} />
+                  </span>
+                  <div>
+                    <span>クトゥルフ神話TRPG</span>
+                    <strong>
+                      {sheets
+                        .filter((s) => s.edition === "6")
+                        .length.toString()
+                        .padStart(2, "0")}
+                      <small>第6版</small>
+                    </strong>
+                  </div>
+                </div>
+              </div>
+              <section
+                className="archive-section"
+                aria-labelledby="archive-title"
               >
-                第{c.edition}版 <ChevronDown size={13} />
-              </button>
-              <button
-                className="button button-white preview-btn"
-                onClick={() => setModal("preview")}
-              >
-                <Eye size={16} />
-                <span>プレビュー</span>
-              </button>
-              <button
-                className="button button-primary"
-                onClick={() => void save()}
-                disabled={saving || !!imageBusy}
-              >
-                {saving ? (
-                  <LoaderCircle className="spin" size={16} />
-                ) : (
-                  <Cloud size={16} />
-                )}
-                <span>{saving ? "保存中" : "クラウドに保存"}</span>
-              </button>
-            </div>
-          </div>
-          <nav className="tabs" aria-label="編集する項目">
-            {tabs.map((t, i) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={tab === t.id ? "tab-active" : ""}
-              >
-                <t.icon size={16} />
-                <span>{t.name}</span>
-                <small>0{i + 1}</small>
-              </button>
-            ))}
-          </nav>
-          <div className="editor-layout">
-            <div className="editor-content" key={`${c.id}-${tab}`}>
-              {tab === "profile" && (
-                <>
-                  <section className="panel glass">
-                    <SectionTitle
-                      number="01"
-                      title="基本情報"
-                      sub="探索者名や職業などを入力してください。"
+                <div className="archive-section-heading">
+                  <div>
+                    <h2 id="archive-title">マイ探索者</h2>
+                    <span className="count-badge">{sheets.length}</span>
+                  </div>
+                  <button
+                    className="text-button"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload size={15} />
+                    JSONを読み込む
+                  </button>
+                </div>
+                <div className="archive-toolbar">
+                  <div className="search-input">
+                    <Search size={17} />
+                    <input
+                      aria-label="探索者を検索"
+                      placeholder="探索者名・職業・プレイヤーで検索"
+                      value={archiveSearch}
+                      onChange={(e) => setArchiveSearch(e.target.value)}
                     />
-                    <div className="profile-layout">
-                      <div
-                        className="character-image-editor"
-                        aria-busy={imageBusy === c.id}
+                    {archiveSearch && (
+                      <button
+                        className="icon-button"
+                        aria-label="探索者の検索をクリア"
+                        onClick={() => setArchiveSearch("")}
                       >
-                        <div className="character-portrait">
-                          {portraitUrl ? (
-                            <img
-                              key={portraitUrl}
-                              src={portraitUrl}
-                              alt={`${c.name || "探索者"}の画像`}
-                            />
+                        <X size={15} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="archive-filters">
+                    <SlidersHorizontal size={16} aria-hidden="true" />
+                    <select
+                      aria-label="探索者の版で絞り込み"
+                      value={editionFilter}
+                      onChange={(e) => setEditionFilter(e.target.value)}
+                    >
+                      <option value="all">すべての版</option>
+                      <option value="7">第7版</option>
+                      <option value="6">第6版</option>
+                    </select>
+                    <select
+                      aria-label="探索者の並び順"
+                      value={archiveSort}
+                      onChange={(e) => setArchiveSort(e.target.value)}
+                    >
+                      <option value="updated">更新が新しい順</option>
+                      <option value="name">名前順</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="investigator-grid">
+                  {archiveSheets.map((s) => (
+                    <button
+                      className="investigator-card"
+                      key={s.id}
+                      onClick={() => {
+                        setActiveId(s.id);
+                        setView("editor");
+                        setTab("profile");
+                      }}
+                    >
+                      <div className="investigator-card-top">
+                        <span className="archive-avatar">
+                          {user && s.image ? (
+                            <img src={imageUrl(s.id, s.image.version)} alt="" />
                           ) : (
-                            <UserRound
-                              size={48}
-                              strokeWidth={1}
-                              aria-hidden="true"
-                            />
+                            <UserRound size={30} strokeWidth={1.2} />
+                          )}
+                        </span>
+                        <span className="edition-badge">第{s.edition}版</span>
+                      </div>
+                      <h3>{s.name || "名前のない探索者"}</h3>
+                      <p>
+                        {s.occupation || "職業未設定"}
+                        {s.player && <span> · {s.player}</span>}
+                      </p>
+                      <div className="card-stat-row">
+                        {["STR", "DEX", "INT", "EDU"].map((key) => (
+                          <span key={key}>
+                            {key}
+                            <b>{s.stats[key as StatKey] || "—"}</b>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="investigator-card-foot">
+                        <span>
+                          <span className="status-dot" />
+                          {new Date(s.updatedAt).toLocaleDateString(
+                            "ja-JP",
+                          )}{" "}
+                          更新
+                        </span>
+                        <span className="card-open">
+                          シートを開く
+                          <ArrowRight size={15} />
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                  {!archiveSheets.length && (
+                    <div className="archive-empty">
+                      <Search size={30} strokeWidth={1.3} />
+                      <h3>探索者が見つかりません</h3>
+                      <p>検索条件を変えて、もう一度お試しください。</p>
+                      <button
+                        className="button button-white"
+                        onClick={() => {
+                          setArchiveSearch("");
+                          setEditionFilter("all");
+                        }}
+                      >
+                        絞り込みをリセット
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    className="create-card"
+                    onClick={() => openModal("new")}
+                  >
+                    <span>
+                      <Plus size={24} />
+                    </span>
+                    <strong>新しい探索者を作成</strong>
+                  </button>
+                </div>
+                <div className="archive-storage-note">
+                  <Shield size={15} />
+                  <span>
+                    探索者は非公開です。編集内容は端末に自動保存されます。
+                  </span>
+                  {!user && (
+                    <a href="/auth/discord">
+                      クラウド保存を利用する
+                      <ArrowRight size={14} />
+                    </a>
+                  )}
+                </div>
+              </section>
+            </>
+          ) : (
+            <>
+              <div className="page-heading">
+                <div>
+                  <button
+                    className="back-link"
+                    onClick={() => setView("archive")}
+                  >
+                    <ArrowLeft size={14} />
+                    探索者一覧に戻る
+                  </button>
+                  <h1>探索者シート</h1>
+                </div>
+                <button
+                  className="button button-white new-button"
+                  onClick={() => openModal("new")}
+                >
+                  <Plus size={17} />
+                  新規作成
+                </button>
+              </div>
+              <div className="editor-top">
+                <div className="editor-title">
+                  <span className="editor-icon">
+                    <FileText size={20} />
+                  </span>
+                  <div>
+                    <h2>{c.name || "新しい探索者"}</h2>
+                    <span>{c.name ? "編集中" : "下書き"}</span>
+                  </div>
+                </div>
+                <div className="editor-actions">
+                  <button
+                    className="edition-switch"
+                    onClick={() => openModal("edition")}
+                  >
+                    第{c.edition}版 <ChevronDown size={13} />
+                  </button>
+                  <button
+                    className="button button-white preview-btn"
+                    onClick={() => openModal("preview")}
+                  >
+                    <Eye size={16} />
+                    <span>プレビュー</span>
+                  </button>
+                  <button
+                    className="button button-primary"
+                    onClick={() => void save()}
+                    disabled={saving || !!imageBusy}
+                  >
+                    {saving ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : (
+                      <Cloud size={16} />
+                    )}
+                    <span>{saving ? "保存中" : "クラウドに保存"}</span>
+                  </button>
+                </div>
+              </div>
+              <nav className="tabs" role="tablist" aria-label="編集する項目">
+                {tabs.map((t, i) => (
+                  <button
+                    key={t.id}
+                    id={`tab-${t.id}`}
+                    role="tab"
+                    aria-selected={tab === t.id}
+                    aria-controls="editor-panel"
+                    tabIndex={tab === t.id ? 0 : -1}
+                    onKeyDown={(e) => {
+                      const next =
+                        e.key === "ArrowRight"
+                          ? (i + 1) % tabs.length
+                          : e.key === "ArrowLeft"
+                            ? (i + tabs.length - 1) % tabs.length
+                            : e.key === "Home"
+                              ? 0
+                              : e.key === "End"
+                                ? tabs.length - 1
+                                : -1;
+                      if (next < 0) return;
+                      e.preventDefault();
+                      setTab(tabs[next].id);
+                      document.getElementById(`tab-${tabs[next].id}`)?.focus();
+                    }}
+                    onClick={() => setTab(t.id)}
+                    className={tab === t.id ? "tab-active" : ""}
+                  >
+                    <t.icon size={16} />
+                    <span>{t.name}</span>
+                    <small>0{i + 1}</small>
+                  </button>
+                ))}
+              </nav>
+              <div className="editor-layout">
+                <div
+                  className="editor-content"
+                  id="editor-panel"
+                  role="tabpanel"
+                  aria-labelledby={`tab-${tab}`}
+                  tabIndex={0}
+                  key={`${c.id}-${tab}`}
+                >
+                  {tab === "profile" && (
+                    <>
+                      <section className="panel glass">
+                        <SectionTitle
+                          number="01"
+                          title="基本情報"
+                          sub="探索者名や職業などを入力してください。"
+                        />
+                        <div className="profile-layout">
+                          <div
+                            className="character-image-editor"
+                            aria-busy={imageBusy === c.id}
+                          >
+                            <div className="character-portrait">
+                              {portraitUrl ? (
+                                <img
+                                  key={portraitUrl}
+                                  src={portraitUrl}
+                                  alt={`${c.name || "探索者"}の画像`}
+                                />
+                              ) : (
+                                <UserRound
+                                  size={48}
+                                  strokeWidth={1}
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </div>
+                            <div className="character-image-controls">
+                              <span className="character-image-label">
+                                探索者の画像
+                              </span>
+                              {user ? (
+                                <>
+                                  <button
+                                    className="button button-white"
+                                    onClick={() => imageRef.current?.click()}
+                                    disabled={!!imageBusy || saving}
+                                  >
+                                    {imageBusy === c.id ? (
+                                      <LoaderCircle
+                                        size={15}
+                                        className="spin"
+                                      />
+                                    ) : (
+                                      <Upload size={15} />
+                                    )}
+                                    {imageBusy === c.id
+                                      ? "処理中…"
+                                      : c.image
+                                        ? "画像を変更"
+                                        : "画像を登録"}
+                                  </button>
+                                  {c.image && (
+                                    <button
+                                      className="text-button text-error"
+                                      onClick={() => void removeImage()}
+                                      disabled={!!imageBusy || saving}
+                                    >
+                                      <Trash2 size={14} />
+                                      画像を削除
+                                    </button>
+                                  )}
+                                  <p>
+                                    JPEG・PNG・WebP / 20MBまで
+                                    <br />
+                                    自動圧縮して保存します。画像の登録時に探索者もクラウドへ保存します。
+                                  </p>
+                                  {c.image && (
+                                    <small>
+                                      {c.image.width} × {c.image.height}px ·{" "}
+                                      {Math.ceil(c.image.size / 1024)}KB
+                                    </small>
+                                  )}
+                                </>
+                              ) : (
+                                <p>
+                                  <a href="/auth/discord">Discordでログイン</a>
+                                  すると画像を登録できます。
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="form-grid">
+                            <Field label="探索者名" hint="NAME" wide>
+                              <input
+                                value={c.name}
+                                maxLength={100}
+                                placeholder="探索者の名前"
+                                onChange={(e) =>
+                                  update({ name: e.target.value })
+                                }
+                              />
+                            </Field>
+                            <Field label="職業" hint="OCCUPATION">
+                              <input
+                                value={c.occupation}
+                                placeholder="例：私立探偵"
+                                maxLength={100}
+                                onChange={(e) =>
+                                  update({ occupation: e.target.value })
+                                }
+                                list="occupations"
+                              />
+                              <datalist id="occupations">
+                                {[
+                                  "私立探偵",
+                                  "医師",
+                                  "大学教授",
+                                  "作家",
+                                  "ジャーナリスト",
+                                  "警察官",
+                                  "古物研究家",
+                                  "ディレッタント",
+                                ].map((x) => (
+                                  <option key={x}>{x}</option>
+                                ))}
+                              </datalist>
+                            </Field>
+                            <Field label="プレイヤー名" hint="PLAYER">
+                              <input
+                                value={c.player}
+                                placeholder="あなたの名前"
+                                maxLength={100}
+                                onChange={(e) =>
+                                  update({ player: e.target.value })
+                                }
+                              />
+                            </Field>
+                            <Field label="年齢" hint="AGE">
+                              <div className="input-unit">
+                                <NumberInput
+                                  value={c.age}
+                                  min={15}
+                                  max={99}
+                                  onValueChange={(age) => update({ age })}
+                                />
+                                <span>歳</span>
+                              </div>
+                            </Field>
+                            <Field label="性別" hint="GENDER">
+                              <input
+                                value={c.gender}
+                                maxLength={50}
+                                placeholder="自由に入力"
+                                onChange={(e) =>
+                                  update({ gender: e.target.value })
+                                }
+                              />
+                            </Field>
+                            <Field label="出身" hint="BIRTHPLACE">
+                              <input
+                                value={c.birthplace}
+                                maxLength={100}
+                                placeholder="例：日本・東京"
+                                onChange={(e) =>
+                                  update({ birthplace: e.target.value })
+                                }
+                              />
+                            </Field>
+                            <Field label="住所" hint="RESIDENCE">
+                              <input
+                                value={c.residence}
+                                maxLength={100}
+                                placeholder="例：アーカム"
+                                onChange={(e) =>
+                                  update({ residence: e.target.value })
+                                }
+                              />
+                            </Field>
+                          </div>
+                        </div>
+                        <div className="panel-note">
+                          <Shield size={14} />
+                          探索者は初期状態で非公開。ログインすると、クラウドにも保存できます。
+                        </div>
+                      </section>
+                      {StatsPanel({ compact: true })}
+                      <div className="next-row">
+                        <button
+                          className="text-button"
+                          onClick={() => setTab("stats")}
+                        >
+                          能力値をくわしく設定
+                          <ArrowRight size={16} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {tab === "stats" && (
+                    <>
+                      {StatsPanel({})}
+                      <section className="panel glass">
+                        <SectionTitle
+                          number="02"
+                          title="派生ステータス"
+                          sub="能力値から自動計算。現在値はセッションに合わせて編集できます。"
+                        />
+                        <div className="derived-grid">
+                          {(
+                            [
+                              ["耐久力", "HP", "currentHP", d.hp],
+                              ["マジック・ポイント", "MP", "currentMP", d.mp],
+                              ["正気度", "SAN", "currentSAN", d.san],
+                            ] as const
+                          ).map(([label, short, key, value]) => (
+                            <div className="derived-card" key={key}>
+                              <span>
+                                {label} <small>{short}</small>
+                              </span>
+                              <div>
+                                <NumberInput
+                                  aria-label={`${label}の現在値`}
+                                  min={0}
+                                  max={key === "currentSAN" ? d.maxSAN : value}
+                                  value={c[key] ?? value}
+                                  onValueChange={(current) =>
+                                    update({ [key]: current })
+                                  }
+                                />
+                                <span>
+                                  / {key === "currentSAN" ? d.maxSAN : value}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="derived-chips">
+                          <span>
+                            アイデア <b>{d.idea}</b>
+                          </span>
+                          <span>
+                            知識 <b>{d.knowledge}</b>
+                          </span>
+                          <span>
+                            DB <b>{d.db}</b>
+                          </span>
+                          {c.edition === "7" && (
+                            <>
+                              <span>
+                                ビルド <b>{d.build}</b>
+                              </span>
+                              <span>
+                                移動率 <b>{d.mov}</b>
+                              </span>
+                            </>
                           )}
                         </div>
-                        <div className="character-image-controls">
-                          <span className="character-image-label">
-                            探索者の画像
-                          </span>
-                          {user ? (
-                            <>
+                        <div className="info-note">
+                          年齢による能力値の減少・EDUの上達は自動適用されません。ルールブックに従って能力値を調整してください。移動率の年齢補正は自動計算します。
+                        </div>
+                      </section>
+                      <button
+                        className="button button-primary section-next"
+                        onClick={() => setTab("skills")}
+                      >
+                        技能を設定する
+                        <ArrowRight size={16} />
+                      </button>
+                    </>
+                  )}
+                  {tab === "skills" && (
+                    <>
+                      <section className="panel glass">
+                        <SectionTitle
+                          number="03"
+                          title="技能ポイント"
+                          sub="職業ポイントの算出方法と割り振りを設定します。"
+                        />
+                        <div className="point-mode">
+                          <button
+                            aria-pressed={c.pointMode === "edu"}
+                            onClick={() => update({ pointMode: "edu" })}
+                            className={c.pointMode === "edu" ? "selected" : ""}
+                          >
+                            EDUから算出
+                          </button>
+                          <button
+                            aria-pressed={c.pointMode === "combination"}
+                            onClick={() => update({ pointMode: "combination" })}
+                            className={
+                              c.pointMode === "combination" ? "selected" : ""
+                            }
+                          >
+                            能力値を組み合わせ
+                          </button>
+                          <button
+                            aria-pressed={c.pointMode === "manual"}
+                            onClick={() => update({ pointMode: "manual" })}
+                            className={
+                              c.pointMode === "manual" ? "selected" : ""
+                            }
+                          >
+                            自由記述・直接入力
+                          </button>
+                        </div>
+                        {c.pointMode === "edu" && (
+                          <div className="formula">
+                            <span>職業ポイント</span>
+                            <b>
+                              EDU <em>×</em> {c.edition === "7" ? 4 : 20}{" "}
+                              <em>=</em> {op}
+                            </b>
+                            <small>基本の算出方法</small>
+                          </div>
+                        )}
+                        {c.pointMode === "combination" && (
+                          <div className="terms">
+                            {c.terms.map((term, i) => (
+                              <div className="term" key={i}>
+                                <select
+                                  aria-label={`算出に使う能力値${i + 1}`}
+                                  value={term.stat}
+                                  onChange={(e) =>
+                                    update({
+                                      terms: c.terms.map((t, j) =>
+                                        i === j
+                                          ? {
+                                              ...t,
+                                              stat: e.target.value as StatKey,
+                                            }
+                                          : t,
+                                      ),
+                                    })
+                                  }
+                                >
+                                  {statKeys.map((k) => (
+                                    <option key={k}>{k}</option>
+                                  ))}
+                                </select>
+                                <span>×</span>
+                                <NumberInput
+                                  aria-label={`係数${i + 1}`}
+                                  min={0}
+                                  max={100}
+                                  value={term.multiplier}
+                                  decimal
+                                  onValueChange={(multiplier) =>
+                                    update({
+                                      terms: c.terms.map((t, j) =>
+                                        i === j ? { ...t, multiplier } : t,
+                                      ),
+                                    })
+                                  }
+                                />
+                                <button
+                                  className="icon-button"
+                                  aria-label={`算出項目${i + 1}を削除`}
+                                  onClick={() =>
+                                    update({
+                                      terms: c.terms.filter((_, j) => i !== j),
+                                    })
+                                  }
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))}
+                            {c.terms.length < 8 && (
                               <button
                                 className="button button-white"
-                                onClick={() => imageRef.current?.click()}
-                                disabled={!!imageBusy || saving}
+                                onClick={() =>
+                                  update({
+                                    terms: [
+                                      ...c.terms,
+                                      { stat: "EDU", multiplier: 2 },
+                                    ],
+                                  })
+                                }
                               >
-                                {imageBusy === c.id ? (
-                                  <LoaderCircle size={15} className="spin" />
-                                ) : (
-                                  <Upload size={15} />
-                                )}
-                                {imageBusy === c.id
-                                  ? "処理中…"
-                                  : c.image
-                                    ? "画像を変更"
-                                    : "画像を登録"}
+                                <Plus size={14} />
+                                項目を追加
                               </button>
-                              {c.image && (
-                                <button
-                                  className="text-button text-error"
-                                  onClick={() => void removeImage()}
-                                  disabled={!!imageBusy || saving}
-                                >
-                                  <Trash2 size={14} />
-                                  画像を削除
-                                </button>
-                              )}
-                              <p>
-                                JPEG・PNG・WebP / 20MBまで
-                                <br />
-                                自動圧縮して保存します。画像の登録時に探索者もクラウドへ保存します。
-                              </p>
-                              {c.image && (
-                                <small>
-                                  {c.image.width} × {c.image.height}px ·{" "}
-                                  {Math.ceil(c.image.size / 1024)}KB
-                                </small>
-                              )}
-                            </>
-                          ) : (
-                            <p>
-                              <a href="/auth/discord">Discordでログイン</a>
-                              すると画像を登録できます。
-                            </p>
-                          )}
+                            )}
+                            <strong>= {op} pt</strong>
+                          </div>
+                        )}
+                        {c.pointMode === "manual" && (
+                          <div className="form-grid manual-points">
+                            <Field label="職業ポイント（直接入力）">
+                              <NumberInput
+                                min={0}
+                                max={999}
+                                value={c.manualPoints}
+                                onValueChange={(manualPoints) =>
+                                  update({ manualPoints })
+                                }
+                              />
+                            </Field>
+                            <Field label="算出方法・ハウスルール（自由記述）">
+                              <input
+                                placeholder="例：EDU×10＋APP×10、KP指定"
+                                maxLength={1000}
+                                value={c.pointNote}
+                                onChange={(e) =>
+                                  update({ pointNote: e.target.value })
+                                }
+                              />
+                            </Field>
+                          </div>
+                        )}
+                        <div className="point-bars">
+                          <PointBar
+                            label="職業ポイント"
+                            used={usedOp}
+                            total={op}
+                          />
+                          <PointBar
+                            label="興味ポイント"
+                            used={usedIp}
+                            total={ip}
+                            green
+                          />
                         </div>
-                      </div>
-                      <div className="form-grid">
-                        <Field label="探索者名" hint="NAME" wide>
-                          <input
-                            value={c.name}
-                            maxLength={100}
-                            placeholder="探索者の名前"
-                            onChange={(e) => update({ name: e.target.value })}
+                      </section>
+                      <section className="panel glass skills-panel">
+                        <div className="skill-header">
+                          <SectionTitle
+                            title="技能一覧"
+                            sub="初期値 ＋ 職業 ＋ 興味 ＋ 成長 ＝ 技能値"
                           />
-                        </Field>
-                        <Field label="職業" hint="OCCUPATION">
-                          <input
-                            value={c.occupation}
-                            placeholder="例：私立探偵"
-                            maxLength={100}
-                            onChange={(e) =>
-                              update({ occupation: e.target.value })
-                            }
-                            list="occupations"
-                          />
-                          <datalist id="occupations">
+                          <button
+                            className="button button-white"
+                            onClick={addSkill}
+                          >
+                            <Plus size={15} />
+                            自由技能
+                          </button>
+                        </div>
+                        <div className="skill-filter">
+                          <div className="search-input">
+                            <Search size={16} />
+                            <input
+                              aria-label="技能を検索"
+                              placeholder="技能を検索…"
+                              value={search}
+                              onChange={(e) => setSearch(e.target.value)}
+                            />
+                          </div>
+                          <select
+                            aria-label="技能カテゴリ"
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                          >
                             {[
-                              "私立探偵",
-                              "医師",
-                              "大学教授",
-                              "作家",
-                              "ジャーナリスト",
-                              "警察官",
-                              "古物研究家",
-                              "ディレッタント",
+                              "すべて",
+                              "探索",
+                              "戦闘",
+                              "行動",
+                              "交渉",
+                              "知識",
+                              "技術",
+                              "自由技能",
                             ].map((x) => (
                               <option key={x}>{x}</option>
                             ))}
-                          </datalist>
-                        </Field>
-                        <Field label="プレイヤー名" hint="PLAYER">
-                          <input
-                            value={c.player}
-                            placeholder="あなたの名前"
-                            maxLength={100}
-                            onChange={(e) => update({ player: e.target.value })}
-                          />
-                        </Field>
-                        <Field label="年齢" hint="AGE">
-                          <div className="input-unit">
-                            <NumberInput
-                              value={c.age}
-                              min={15}
-                              max={99}
-                              onValueChange={(age) => update({ age })}
-                            />
-                            <span>歳</span>
-                          </div>
-                        </Field>
-                        <Field label="性別" hint="GENDER">
-                          <input
-                            value={c.gender}
-                            maxLength={50}
-                            placeholder="自由に入力"
-                            onChange={(e) => update({ gender: e.target.value })}
-                          />
-                        </Field>
-                        <Field label="出身" hint="BIRTHPLACE">
-                          <input
-                            value={c.birthplace}
-                            maxLength={100}
-                            placeholder="例：日本・東京"
-                            onChange={(e) =>
-                              update({ birthplace: e.target.value })
-                            }
-                          />
-                        </Field>
-                        <Field label="住所" hint="RESIDENCE">
-                          <input
-                            value={c.residence}
-                            maxLength={100}
-                            placeholder="例：アーカム"
-                            onChange={(e) =>
-                              update({ residence: e.target.value })
-                            }
-                          />
-                        </Field>
-                      </div>
-                    </div>
-                    <div className="panel-note">
-                      <Shield size={14} />
-                      探索者は初期状態で非公開。ログインすると、クラウドにも保存できます。
-                    </div>
-                  </section>
-                  {StatsPanel({ compact: true })}
-                  <div className="next-row">
-                    <button
-                      className="text-button"
-                      onClick={() => setTab("stats")}
-                    >
-                      能力値をくわしく設定
-                      <ArrowRight size={16} />
-                    </button>
-                  </div>
-                </>
-              )}
-              {tab === "stats" && (
-                <>
-                  {StatsPanel({})}
-                  <section className="panel glass">
-                    <SectionTitle
-                      number="02"
-                      title="派生ステータス"
-                      sub="能力値から自動計算。現在値はセッションに合わせて編集できます。"
-                    />
-                    <div className="derived-grid">
-                      {(
-                        [
-                          ["耐久力", "HP", "currentHP", d.hp],
-                          ["マジック・ポイント", "MP", "currentMP", d.mp],
-                          ["正気度", "SAN", "currentSAN", d.san],
-                        ] as const
-                      ).map(([label, short, key, value]) => (
-                        <div className="derived-card" key={key}>
-                          <span>
-                            {label} <small>{short}</small>
-                          </span>
-                          <div>
-                            <NumberInput
-                              aria-label={`${label}の現在値`}
-                              min={0}
-                              max={key === "currentSAN" ? d.maxSAN : value}
-                              value={c[key] ?? value}
-                              onValueChange={(current) =>
-                                update({ [key]: current })
-                              }
-                            />
-                            <span>
-                              / {key === "currentSAN" ? d.maxSAN : value}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="derived-chips">
-                      <span>
-                        アイデア <b>{d.idea}</b>
-                      </span>
-                      <span>
-                        知識 <b>{d.knowledge}</b>
-                      </span>
-                      <span>
-                        DB <b>{d.db}</b>
-                      </span>
-                      {c.edition === "7" && (
-                        <>
-                          <span>
-                            ビルド <b>{d.build}</b>
-                          </span>
-                          <span>
-                            移動率 <b>{d.mov}</b>
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    <div className="info-note">
-                      年齢による能力値の減少・EDUの上達は自動適用されません。ルールブックに従って能力値を調整してください。移動率の年齢補正は自動計算します。
-                    </div>
-                  </section>
-                  <button
-                    className="button button-primary section-next"
-                    onClick={() => setTab("skills")}
-                  >
-                    技能を設定する
-                    <ArrowRight size={16} />
-                  </button>
-                </>
-              )}
-              {tab === "skills" && (
-                <>
-                  <section className="panel glass">
-                    <SectionTitle
-                      number="03"
-                      title="技能ポイント"
-                      sub="職業ポイントの算出方法と割り振りを設定します。"
-                    />
-                    <div className="point-mode">
-                      <button
-                        onClick={() => update({ pointMode: "edu" })}
-                        className={c.pointMode === "edu" ? "selected" : ""}
-                      >
-                        EDUから算出
-                      </button>
-                      <button
-                        onClick={() => update({ pointMode: "combination" })}
-                        className={
-                          c.pointMode === "combination" ? "selected" : ""
-                        }
-                      >
-                        能力値を組み合わせ
-                      </button>
-                      <button
-                        onClick={() => update({ pointMode: "manual" })}
-                        className={c.pointMode === "manual" ? "selected" : ""}
-                      >
-                        自由記述・直接入力
-                      </button>
-                    </div>
-                    {c.pointMode === "edu" && (
-                      <div className="formula">
-                        <span>職業ポイント</span>
-                        <b>
-                          EDU <em>×</em> {c.edition === "7" ? 4 : 20} <em>=</em>{" "}
-                          {op}
-                        </b>
-                        <small>基本の算出方法</small>
-                      </div>
-                    )}
-                    {c.pointMode === "combination" && (
-                      <div className="terms">
-                        {c.terms.map((term, i) => (
-                          <div className="term" key={i}>
-                            <select
-                              aria-label={`算出に使う能力値${i + 1}`}
-                              value={term.stat}
+                          </select>
+                          <label className="check-label">
+                            <input
+                              type="checkbox"
+                              checked={allocatedOnly}
                               onChange={(e) =>
-                                update({
-                                  terms: c.terms.map((t, j) =>
-                                    i === j
-                                      ? {
-                                          ...t,
-                                          stat: e.target.value as StatKey,
-                                        }
-                                      : t,
-                                  ),
-                                })
-                              }
-                            >
-                              {statKeys.map((k) => (
-                                <option key={k}>{k}</option>
-                              ))}
-                            </select>
-                            <span>×</span>
-                            <NumberInput
-                              aria-label={`係数${i + 1}`}
-                              min={0}
-                              max={100}
-                              value={term.multiplier}
-                              decimal
-                              onValueChange={(multiplier) =>
-                                update({
-                                  terms: c.terms.map((t, j) =>
-                                    i === j ? { ...t, multiplier } : t,
-                                  ),
-                                })
+                                setAllocatedOnly(e.target.checked)
                               }
                             />
-                            <button
-                              className="icon-button"
-                              aria-label={`算出項目${i + 1}を削除`}
-                              onClick={() =>
-                                update({
-                                  terms: c.terms.filter((_, j) => i !== j),
-                                })
-                              }
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ))}
-                        {c.terms.length < 8 && (
-                          <button
-                            className="button button-white"
-                            onClick={() =>
-                              update({
-                                terms: [
-                                  ...c.terms,
-                                  { stat: "EDU", multiplier: 2 },
-                                ],
-                              })
-                            }
+                            割り振り済み
+                          </label>
+                        </div>
+                        <div className="skill-scroll-hint">
+                          <ArrowRight size={14} />
+                          技能表は横にスクロールできます
+                        </div>
+                        <div
+                          className="skill-table-wrap"
+                          tabIndex={0}
+                          role="region"
+                          aria-label="技能表（横スクロール）"
+                        >
+                          <table
+                            className="skill-table"
+                            aria-label="技能と割り振りポイント"
                           >
-                            <Plus size={14} />
-                            項目を追加
-                          </button>
-                        )}
-                        <strong>= {op} pt</strong>
-                      </div>
-                    )}
-                    {c.pointMode === "manual" && (
-                      <div className="form-grid manual-points">
-                        <Field label="職業ポイント（直接入力）">
-                          <NumberInput
-                            min={0}
-                            max={999}
-                            value={c.manualPoints}
-                            onValueChange={(manualPoints) =>
-                              update({ manualPoints })
-                            }
-                          />
-                        </Field>
-                        <Field label="算出方法・ハウスルール（自由記述）">
-                          <input
-                            placeholder="例：EDU×10＋APP×10、KP指定"
-                            maxLength={1000}
-                            value={c.pointNote}
-                            onChange={(e) =>
-                              update({ pointNote: e.target.value })
-                            }
-                          />
-                        </Field>
-                      </div>
-                    )}
-                    <div className="point-bars">
-                      <PointBar label="職業ポイント" used={usedOp} total={op} />
-                      <PointBar
-                        label="興味ポイント"
-                        used={usedIp}
-                        total={ip}
-                        green
-                      />
-                    </div>
-                  </section>
-                  <section className="panel glass skills-panel">
-                    <div className="skill-header">
-                      <SectionTitle
-                        title="技能一覧"
-                        sub="初期値 ＋ 職業 ＋ 興味 ＋ 成長 ＝ 技能値"
-                      />
-                      <button
-                        className="button button-white"
-                        onClick={addSkill}
-                      >
-                        <Plus size={15} />
-                        自由技能
-                      </button>
-                    </div>
-                    <div className="skill-filter">
-                      <div className="search-input">
-                        <Search size={16} />
-                        <input
-                          aria-label="技能を検索"
-                          placeholder="技能を検索…"
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                        />
-                      </div>
-                      <select
-                        aria-label="技能カテゴリ"
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                      >
-                        {[
-                          "すべて",
-                          "探索",
-                          "戦闘",
-                          "行動",
-                          "交渉",
-                          "知識",
-                          "技術",
-                          "自由技能",
-                        ].map((x) => (
-                          <option key={x}>{x}</option>
-                        ))}
-                      </select>
-                      <label className="check-label">
-                        <input
-                          type="checkbox"
-                          checked={allocatedOnly}
-                          onChange={(e) => setAllocatedOnly(e.target.checked)}
-                        />
-                        割り振り済み
-                      </label>
-                    </div>
-                    <div className="skill-table-wrap">
-                      <table className="skill-table">
-                        <thead>
-                          <tr>
-                            <th>技能名</th>
-                            <th>初期</th>
-                            <th>職業</th>
-                            <th>興味</th>
-                            <th>成長</th>
-                            <th>合計</th>
-                            {c.edition === "7" && (
-                              <>
-                                <th>½</th>
-                                <th>⅕</th>
-                              </>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortSkills(c.skills)
-                            .filter(
-                              (s) =>
-                                s.name.includes(search) &&
-                                (category === "すべて" ||
-                                  s.category === category) &&
-                                (!allocatedOnly ||
-                                  s.occupation + s.interest + s.growth > 0),
-                            )
-                            .map((s) => (
-                              <tr
-                                key={s.id}
-                                className={
-                                  s.occupation + s.interest > 0
-                                    ? "skill-trained"
-                                    : ""
-                                }
-                              >
-                                <td>
-                                  {s.custom ? (
-                                    <div className="custom-skill-name">
-                                      <input
-                                        aria-label="自由技能名"
-                                        maxLength={100}
-                                        value={s.name}
-                                        onChange={(e) =>
-                                          updateSkill(s.id, {
-                                            name:
-                                              e.target.value || "新しい技能",
-                                          })
-                                        }
-                                      />
-                                      <button
-                                        className="icon-button"
-                                        aria-label={`${s.name}を削除`}
-                                        onClick={() =>
-                                          update({
-                                            skills: c.skills.filter(
-                                              (x) => x.id !== s.id,
-                                            ),
-                                          })
-                                        }
-                                      >
-                                        <X size={13} />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <SkillNameInput
-                                        skill={s}
-                                        onChange={(name) =>
-                                          updateSkill(s.id, { name })
-                                        }
-                                      />
-                                      {s.name === "クトゥルフ神話" && (
-                                        <small className="mythos-note">
-                                          成長のみ
-                                        </small>
-                                      )}
-                                    </>
-                                  )}
-                                </td>
-                                <td>
-                                  {s.custom ? (
-                                    <NumberInput
-                                      aria-label={`${s.name}の初期値`}
-                                      min={0}
-                                      max={99}
-                                      value={s.base}
-                                      onValueChange={(base) =>
-                                        updateSkill(s.id, { base })
-                                      }
-                                    />
-                                  ) : (
-                                    skillBase(s, c)
-                                  )}
-                                </td>
-                                {(
-                                  ["occupation", "interest", "growth"] as const
-                                ).map((key, i) => (
-                                  <td key={key}>
-                                    <NumberInput
-                                      aria-label={`${s.name}の${["職業", "興味", "成長"][i]}ポイント`}
-                                      min={0}
-                                      max={99}
-                                      value={s[key]}
-                                      disabled={
-                                        s.name === "クトゥルフ神話" &&
-                                        key !== "growth"
-                                      }
-                                      onValueChange={(points) =>
-                                        updateSkill(s.id, { [key]: points })
-                                      }
-                                    />
-                                  </td>
-                                ))}
-                                <td
-                                  className={
-                                    skillTotal(s, c) > 99
-                                      ? "total-error"
-                                      : "skill-total"
-                                  }
-                                >
-                                  {skillTotal(s, c)}
-                                  <small>%</small>
-                                </td>
+                            <thead>
+                              <tr>
+                                <th>技能名</th>
+                                <th>初期</th>
+                                <th>職業</th>
+                                <th>興味</th>
+                                <th>成長</th>
+                                <th>合計</th>
                                 {c.edition === "7" && (
                                   <>
-                                    <td>{Math.floor(skillTotal(s, c) / 2)}</td>
-                                    <td>{Math.floor(skillTotal(s, c) / 5)}</td>
+                                    <th>½</th>
+                                    <th>⅕</th>
                                   </>
                                 )}
                               </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {!c.skills.some(
-                      (s) =>
-                        s.name.includes(search) &&
-                        (category === "すべて" || s.category === category) &&
-                        (!allocatedOnly ||
-                          s.occupation + s.interest + s.growth > 0),
-                    ) && (
-                      <div className="empty-search">
-                        該当する技能がありません。
+                            </thead>
+                            <tbody>
+                              {sortSkills(c.skills)
+                                .filter(
+                                  (s) =>
+                                    s.name.includes(search) &&
+                                    (category === "すべて" ||
+                                      s.category === category) &&
+                                    (!allocatedOnly ||
+                                      s.occupation + s.interest + s.growth > 0),
+                                )
+                                .map((s) => (
+                                  <tr
+                                    key={s.id}
+                                    className={
+                                      s.occupation + s.interest > 0
+                                        ? "skill-trained"
+                                        : ""
+                                    }
+                                  >
+                                    <td>
+                                      {s.custom ? (
+                                        <div className="custom-skill-name">
+                                          <input
+                                            aria-label="自由技能名"
+                                            maxLength={100}
+                                            value={s.name}
+                                            onChange={(e) =>
+                                              updateSkill(s.id, {
+                                                name:
+                                                  e.target.value ||
+                                                  "新しい技能",
+                                              })
+                                            }
+                                          />
+                                          <button
+                                            className="icon-button"
+                                            aria-label={`${s.name}を削除`}
+                                            onClick={() =>
+                                              update({
+                                                skills: c.skills.filter(
+                                                  (x) => x.id !== s.id,
+                                                ),
+                                              })
+                                            }
+                                          >
+                                            <X size={13} />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <SkillNameInput
+                                            skill={s}
+                                            onChange={(name) =>
+                                              updateSkill(s.id, { name })
+                                            }
+                                          />
+                                          {s.name === "クトゥルフ神話" && (
+                                            <small className="mythos-note">
+                                              成長のみ
+                                            </small>
+                                          )}
+                                        </>
+                                      )}
+                                    </td>
+                                    <td>
+                                      {s.custom ? (
+                                        <NumberInput
+                                          aria-label={`${s.name}の初期値`}
+                                          min={0}
+                                          max={99}
+                                          value={s.base}
+                                          onValueChange={(base) =>
+                                            updateSkill(s.id, { base })
+                                          }
+                                        />
+                                      ) : (
+                                        skillBase(s, c)
+                                      )}
+                                    </td>
+                                    {(
+                                      [
+                                        "occupation",
+                                        "interest",
+                                        "growth",
+                                      ] as const
+                                    ).map((key, i) => (
+                                      <td key={key}>
+                                        <NumberInput
+                                          aria-label={`${s.name}の${["職業", "興味", "成長"][i]}ポイント`}
+                                          min={0}
+                                          max={99}
+                                          value={s[key]}
+                                          disabled={
+                                            s.name === "クトゥルフ神話" &&
+                                            key !== "growth"
+                                          }
+                                          onValueChange={(points) =>
+                                            updateSkill(s.id, { [key]: points })
+                                          }
+                                        />
+                                      </td>
+                                    ))}
+                                    <td
+                                      className={
+                                        skillTotal(s, c) > 99
+                                          ? "total-error"
+                                          : "skill-total"
+                                      }
+                                    >
+                                      {skillTotal(s, c)}
+                                      <small>%</small>
+                                    </td>
+                                    {c.edition === "7" && (
+                                      <>
+                                        <td>
+                                          {Math.floor(skillTotal(s, c) / 2)}
+                                        </td>
+                                        <td>
+                                          {Math.floor(skillTotal(s, c) / 5)}
+                                        </td>
+                                      </>
+                                    )}
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {!c.skills.some(
+                          (s) =>
+                            s.name.includes(search) &&
+                            (category === "すべて" ||
+                              s.category === category) &&
+                            (!allocatedOnly ||
+                              s.occupation + s.interest + s.growth > 0),
+                        ) && (
+                          <div className="empty-search">
+                            該当する技能がありません。
+                          </div>
+                        )}
+                        <div className="panel-note">
+                          <BookOpen size={14} />
+                          技能は五十音順に表示。括弧内は自由に入力できます。
+                        </div>
+                      </section>
+                    </>
+                  )}
+                  {tab === "story" && (
+                    <section className="panel glass">
+                      <SectionTitle
+                        number="04"
+                        title="バックストーリー"
+                        sub="容姿や信念などを自由に入力できます。"
+                      />
+                      <div className="story-grid">
+                        {(
+                          [
+                            [
+                              "appearance",
+                              "容姿の描写",
+                              "髪、目、体格、服装など。",
+                            ],
+                            [
+                              "belief",
+                              "イデオロギー／信念",
+                              "信念や価値観を入力。",
+                            ],
+                            [
+                              "importantPeople",
+                              "重要な人々",
+                              "家族、友人、恩人など。",
+                            ],
+                            [
+                              "meaningfulPlaces",
+                              "意味のある場所",
+                              "出身地や思い出の場所など。",
+                            ],
+                            [
+                              "treasuredPossessions",
+                              "秘蔵の品",
+                              "大切にしている所持品など。",
+                            ],
+                            [
+                              "traits",
+                              "特徴",
+                              "性格、口癖、負傷、恐怖症など。",
+                            ],
+                          ] as const
+                        ).map(([key, label, placeholder]) => (
+                          <Field key={key} label={label}>
+                            <textarea
+                              value={c[key]}
+                              maxLength={4000}
+                              placeholder={placeholder}
+                              rows={4}
+                              onChange={(e) =>
+                                update({ [key]: e.target.value })
+                              }
+                            />
+                          </Field>
+                        ))}
                       </div>
-                    )}
-                    <div className="panel-note">
-                      <BookOpen size={14} />
-                      技能は五十音順に表示。括弧内は自由に入力できます。
-                    </div>
-                  </section>
-                </>
-              )}
-              {tab === "story" && (
-                <section className="panel glass">
-                  <SectionTitle
-                    number="04"
-                    title="バックストーリー"
-                    sub="容姿や信念などを自由に入力できます。"
-                  />
-                  <div className="story-grid">
-                    {(
-                      [
-                        [
-                          "appearance",
-                          "容姿の描写",
-                          "髪、目、体格、服装など。",
-                        ],
-                        [
-                          "belief",
-                          "イデオロギー／信念",
-                          "信念や価値観を入力。",
-                        ],
-                        [
-                          "importantPeople",
-                          "重要な人々",
-                          "家族、友人、恩人など。",
-                        ],
-                        [
-                          "meaningfulPlaces",
-                          "意味のある場所",
-                          "出身地や思い出の場所など。",
-                        ],
-                        [
-                          "treasuredPossessions",
-                          "秘蔵の品",
-                          "大切にしている所持品など。",
-                        ],
-                        ["traits", "特徴", "性格、口癖、負傷、恐怖症など。"],
-                      ] as const
-                    ).map(([key, label, placeholder]) => (
-                      <Field key={key} label={label}>
+                    </section>
+                  )}
+                  {tab === "equipment" && (
+                    <section className="panel glass">
+                      <SectionTitle
+                        number="05"
+                        title="装備と探索の記録"
+                        sub="所持品やセッション中の記録を入力できます。"
+                      />
+                      <Field label="装備と所持品" hint="EQUIPMENT">
                         <textarea
-                          value={c[key]}
-                          maxLength={4000}
-                          placeholder={placeholder}
-                          rows={4}
-                          onChange={(e) => update({ [key]: e.target.value })}
+                          value={c.equipment}
+                          placeholder="武器、持ち物、収入と財産など。"
+                          rows={8}
+                          maxLength={10000}
+                          onChange={(e) =>
+                            update({ equipment: e.target.value })
+                          }
                         />
                       </Field>
-                    ))}
-                  </div>
-                </section>
-              )}
-              {tab === "equipment" && (
-                <section className="panel glass">
-                  <SectionTitle
-                    number="05"
-                    title="装備と探索の記録"
-                    sub="所持品やセッション中の記録を入力できます。"
-                  />
-                  <Field label="装備と所持品" hint="EQUIPMENT">
-                    <textarea
-                      value={c.equipment}
-                      placeholder="武器、持ち物、収入と財産など。"
-                      rows={8}
-                      maxLength={10000}
-                      onChange={(e) => update({ equipment: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="セッションメモ" hint="SESSION NOTES">
-                    <textarea
-                      value={c.notes}
-                      placeholder="探索の記録、出会った人々、学んだ呪文など。"
-                      rows={10}
-                      maxLength={20000}
-                      onChange={(e) => update({ notes: e.target.value })}
-                    />
-                  </Field>
-                </section>
-              )}
-            </div>
-            <aside className="summary-column">
-              <section className="summary-card glass">
-                <div className="summary-label">
-                  <span>INVESTIGATOR</span>
-                  <span className="summary-edition">{c.edition}th EDITION</span>
+                      <Field label="セッションメモ" hint="SESSION NOTES">
+                        <textarea
+                          value={c.notes}
+                          placeholder="探索の記録、出会った人々、学んだ呪文など。"
+                          rows={10}
+                          maxLength={20000}
+                          onChange={(e) => update({ notes: e.target.value })}
+                        />
+                      </Field>
+                    </section>
+                  )}
                 </div>
-                <div className="summary-identity">
-                  <div className="summary-avatar">
-                    {portraitUrl ? (
-                      <img
-                        key={portraitUrl}
-                        src={portraitUrl}
-                        alt="探索者の画像"
-                      />
-                    ) : (
-                      <UserRound size={28} strokeWidth={1.3} />
-                    )}
-                    <span />
-                  </div>
-                  <h3>{c.name || "名前のない探索者"}</h3>
-                  <p>{c.occupation || "職業未設定"}</p>
-                  {c.player && <small>PLAYER · {c.player}</small>}
-                </div>
-                <div className="summary-divider" />
-                <div className="vitals">
-                  <div>
-                    <span>
-                      <Heart size={13} />
-                      HP
-                    </span>
-                    <b>
-                      {c.currentHP ?? d.hp}
-                      <small>/ {d.hp}</small>
-                    </b>
-                  </div>
-                  <div>
-                    <span>
-                      <Zap size={13} />
-                      MP
-                    </span>
-                    <b>
-                      {c.currentMP ?? d.mp}
-                      <small>/ {d.mp}</small>
-                    </b>
-                  </div>
-                  <div>
-                    <span>
-                      <Shield size={13} />
-                      SAN
-                    </span>
-                    <b>
-                      {c.currentSAN ?? d.san}
-                      <small>/ {d.maxSAN}</small>
-                    </b>
-                  </div>
-                </div>
-                <div className="summary-stats">
-                  {statKeys.map((k) => (
-                    <div key={k}>
-                      <span>{k}</span>
-                      <b>{c.stats[k] || "—"}</b>
+                <aside className="summary-column">
+                  <section className="summary-card glass">
+                    <div className="summary-label">
+                      <span>探索者サマリー</span>
+                      <span className="summary-edition">第{c.edition}版</span>
                     </div>
-                  ))}
-                </div>
-                <div className="summary-points">
-                  <div>
-                    <span>
-                      <i className="point-dot" />
-                      職業ポイント
-                    </span>
-                    <b className={usedOp > op ? "text-error" : ""}>
-                      {op - usedOp}
-                      <small> / {op}</small>
-                    </b>
+                    <div className="summary-identity">
+                      <div className="summary-avatar">
+                        {portraitUrl ? (
+                          <img
+                            key={portraitUrl}
+                            src={portraitUrl}
+                            alt="探索者の画像"
+                          />
+                        ) : (
+                          <UserRound size={28} strokeWidth={1.3} />
+                        )}
+                        <span />
+                      </div>
+                      <h3>{c.name || "名前のない探索者"}</h3>
+                      <p>{c.occupation || "職業未設定"}</p>
+                      {c.player && <small>PLAYER · {c.player}</small>}
+                    </div>
+                    <div className="summary-divider" />
+                    <div className="vitals">
+                      <div>
+                        <span>
+                          <Heart size={13} />
+                          HP
+                        </span>
+                        <b>
+                          {c.currentHP ?? d.hp}
+                          <small>/ {d.hp}</small>
+                        </b>
+                      </div>
+                      <div>
+                        <span>
+                          <Zap size={13} />
+                          MP
+                        </span>
+                        <b>
+                          {c.currentMP ?? d.mp}
+                          <small>/ {d.mp}</small>
+                        </b>
+                      </div>
+                      <div>
+                        <span>
+                          <Shield size={13} />
+                          SAN
+                        </span>
+                        <b>
+                          {c.currentSAN ?? d.san}
+                          <small>/ {d.maxSAN}</small>
+                        </b>
+                      </div>
+                    </div>
+                    <div className="summary-stats">
+                      {statKeys.map((k) => (
+                        <div key={k}>
+                          <span>{k}</span>
+                          <b>{c.stats[k] || "—"}</b>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="summary-points">
+                      <div>
+                        <span>
+                          <i className="point-dot" />
+                          職業ポイント
+                        </span>
+                        <b className={usedOp > op ? "text-error" : ""}>
+                          {op - usedOp}
+                          <small> / {op}</small>
+                        </b>
+                      </div>
+                      <div>
+                        <span>
+                          <i className="point-dot green" />
+                          興味ポイント
+                        </span>
+                        <b className={usedIp > ip ? "text-error" : ""}>
+                          {ip - usedIp}
+                          <small> / {ip}</small>
+                        </b>
+                      </div>
+                      <span className="remaining-label">残りポイント</span>
+                    </div>
+                    <button
+                      className="summary-preview"
+                      onClick={() => openModal("preview")}
+                    >
+                      <Eye size={15} />
+                      キャラクターシートを確認
+                      <ArrowRight size={14} />
+                    </button>
+                  </section>
+                  <section className="completion glass">
+                    <div>
+                      <span>入力状況</span>
+                      <b>
+                        {progress}
+                        <small> / 5</small>
+                      </b>
+                    </div>
+                    <div className="completion-track">
+                      <span style={{ width: `${progress * 20}%` }} />
+                    </div>
+                    <p>{`${progress}項目を入力済み`}</p>
+                  </section>
+                  {errors.length > 0 && (
+                    <div className="validation-alert" role="alert">
+                      {errors.map((e) => (
+                        <p key={e}>{e}</p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="data-actions">
+                    <button onClick={exportJSON}>
+                      <Download size={13} />
+                      JSON出力
+                    </button>
+                    <button onClick={() => fileRef.current?.click()}>
+                      <Upload size={13} />
+                      読み込み
+                    </button>
+                    <button
+                      aria-label="探索者を削除"
+                      onClick={() => openModal("delete")}
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-                  <div>
-                    <span>
-                      <i className="point-dot green" />
-                      興味ポイント
-                    </span>
-                    <b className={usedIp > ip ? "text-error" : ""}>
-                      {ip - usedIp}
-                      <small> / {ip}</small>
-                    </b>
-                  </div>
-                  <span className="remaining-label">残りポイント</span>
-                </div>
-                <button
-                  className="summary-preview"
-                  onClick={() => setModal("preview")}
-                >
-                  <Eye size={15} />
-                  キャラクターシートを確認
-                  <ArrowRight size={14} />
-                </button>
-              </section>
-              <section className="completion glass">
-                <div>
-                  <span>入力状況</span>
-                  <b>
-                    {progress}
-                    <small> / 5</small>
-                  </b>
-                </div>
-                <div className="completion-track">
-                  <span style={{ width: `${progress * 20}%` }} />
-                </div>
-                <p>{`${progress}項目を入力済み`}</p>
-              </section>
-              {errors.length > 0 && (
-                <div className="validation-alert" role="alert">
-                  {errors.map((e) => (
-                    <p key={e}>{e}</p>
-                  ))}
-                </div>
-              )}
-              <div className="data-actions">
-                <button onClick={exportJSON}>
-                  <Download size={13} />
-                  JSON出力
-                </button>
-                <button onClick={() => fileRef.current?.click()}>
-                  <Upload size={13} />
-                  読み込み
-                </button>
-                <button
-                  aria-label="探索者を削除"
-                  onClick={() => setModal("delete")}
-                >
-                  <Trash2 size={13} />
-                </button>
+                </aside>
               </div>
-            </aside>
-          </div>
+            </>
+          )}
           <footer className="page-footer">
-            <Logo small />
+            <div className="footer-brand">
+              <Logo small />
+              <span>Arkhive</span>
+            </div>
             <a
               href="https://product.kadokawa.co.jp/cthulhu/contents/coc_material/"
               target="_blank"
@@ -1598,6 +2011,7 @@ function App() {
           }
           onClose={() => setModal(null)}
           wide={modal === "preview"}
+          returnFocus={modalTrigger.current}
         >
           {modal === "new" && (
             <>
@@ -1608,6 +2022,7 @@ function App() {
                 {(["7", "6"] as Edition[]).map((e) => (
                   <button
                     key={e}
+                    aria-pressed={newEdition === e}
                     className={newEdition === e ? "edition-selected" : ""}
                     onClick={() => setNewEdition(e)}
                   >
@@ -1694,7 +2109,7 @@ function App() {
                 <p>
                   <b>クラウドへの保存</b>
                   <small>
-                    ログイン後「クラウドに保存」でD1へ保存。他の端末からも開けます。
+                    ログイン後「クラウドに保存」で保存。他の端末からも開けます。
                   </small>
                 </p>
               </div>
@@ -1949,32 +2364,9 @@ function App() {
         </ModalFrame>
       )}
       {loading && (
-        <div
-          className="full-skeleton"
-          role="status"
-          aria-label="探索者ノートを読み込み中"
-        >
-          <div className="skeleton-side">
-            <Logo />
-            <div className="skeleton-block" />
-            <div className="skeleton-block" />
-          </div>
-          <div className="skeleton-main">
-            <div className="skeleton-top" />
-            <div className="skeleton-heading" />
-            <div className="skeleton-banner" />
-            <div className="skeleton-columns">
-              <div>
-                <div className="skeleton-panel" />
-                <div className="skeleton-panel" />
-              </div>
-              <div className="skeleton-panel" />
-            </div>
-            <span className="skeleton-caption">
-              <LoaderCircle size={16} className="spin" />
-              探索者ノートをひらいています
-            </span>
-          </div>
+        <div className="loading-indicator" role="status">
+          <LoaderCircle size={16} className="spin" />
+          データを読み込んでいます…
         </div>
       )}
     </>
@@ -2173,16 +2565,19 @@ function ModalFrame({
   title,
   onClose,
   wide,
+  returnFocus,
   children,
 }: {
   title: string;
   onClose: () => void;
   wide?: boolean;
+  returnFocus?: HTMLElement | null;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous =
+      returnFocus ?? (document.activeElement as HTMLElement | null);
     const el = ref.current;
     el?.focus();
     const trap = (e: KeyboardEvent) => {
@@ -2208,7 +2603,15 @@ function ModalFrame({
     el?.addEventListener("keydown", trap);
     return () => {
       el?.removeEventListener("keydown", trap);
-      previous?.focus();
+      if (
+        previous?.isConnected &&
+        previous !== document.body &&
+        getComputedStyle(previous).visibility !== "hidden"
+      )
+        previous.focus();
+      else if (window.matchMedia("(max-width: 760px)").matches)
+        document.querySelector<HTMLButtonElement>(".mobile-menu")?.focus();
+      else document.getElementById("main-content")?.focus();
     };
   }, []);
   return (
