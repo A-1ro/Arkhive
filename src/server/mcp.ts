@@ -18,7 +18,7 @@ export function createMcpServer(
   origin: string,
 ) {
   const server = new McpServer({
-    name: "mythos-investigator-notebook",
+    name: "arkhive-investigator-notebook",
     version: "1.0.0",
   });
   const result = (data: unknown) => ({

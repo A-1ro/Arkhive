@@ -145,7 +145,7 @@ describe("D1 persistence and access control", () => {
     expect(init.status).toBe(200);
     expect(await init.json()).toHaveProperty(
       "result.serverInfo.name",
-      "mythos-investigator-notebook",
+      "arkhive-investigator-notebook",
     );
     const tools = (await (await rpc("tools/list", {})).json()) as {
       result: { tools: { name: string }[] };

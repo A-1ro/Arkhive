@@ -154,7 +154,7 @@ app.all("/mcp", async (c) => {
     ?.match(/^Bearer (mythos_[a-f0-9]{64})$/)?.[1];
   if (!bearer)
     return c.json({ error: "MCP設定で発行したBearerトークンが必要です" }, 401, {
-      "WWW-Authenticate": 'Bearer realm="MYTHOS"',
+      "WWW-Authenticate": 'Bearer realm="Arkhive"',
     });
   const user = await c.env.DB.prepare(
     "SELECT u.id,u.name,u.avatar FROM api_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=?",

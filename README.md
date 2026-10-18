@@ -1,4 +1,4 @@
-# MYTHOS 探索者ノート
+# Arkhive 探索者ノート
 
 クトゥルフ神話TRPG（第6版）・新クトゥルフ神話TRPG（第7版）の非公式キャラクターシート作成サイトです。
 
@@ -89,7 +89,7 @@ Bearerヘッダー付きStreamable HTTPに対応したMCPクライアントへ�
 ```json
 {
   "mcpServers": {
-    "mythos": {
+    "arkhive": {
       "url": "https://cthulhu-charactersheet.aaa-4e2k3.workers.dev/mcp",
       "headers": {
         "Authorization": "Bearer <発行したトークン>"

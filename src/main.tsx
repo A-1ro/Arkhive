@@ -90,7 +90,7 @@ function Logo({ small = false }: { small?: boolean }) {
       <span className="brand-mark">
         <svg viewBox="0 0 40 40" fill="none">
           <path
-            d="M8 27V12l12 12 12-12v15M14 20v12m12-12v12"
+            d="M8 30 20 10l12 20M12 24h16"
             stroke="currentColor"
             strokeWidth="2.3"
             strokeLinecap="round"
@@ -100,7 +100,7 @@ function Logo({ small = false }: { small?: boolean }) {
       </span>
       {!small && (
         <span>
-          MYTHOS<small>探索者ノート</small>
+          Arkhive<small>探索者ノート</small>
         </span>
       )}
     </div>
@@ -316,7 +316,7 @@ function App() {
       setTab("profile");
       notify("探索者を読み込みました");
     } catch {
-      notify("MYTHOSの探索者JSON形式を確認してください", "error");
+      notify("Arkhiveの探索者JSON形式を確認してください", "error");
     } finally {
       if (fileRef.current) fileRef.current.value = "";
     }
@@ -390,7 +390,7 @@ function App() {
       <div className="ambient ambient-two" />
       <div className="noise" />
       <aside className={`sidebar ${menu ? "sidebar-open" : ""}`}>
-        <a href="/" className="logo-link" aria-label="MYTHOS ホーム">
+        <a href="/" className="logo-link" aria-label="Arkhive ホーム">
           <Logo />
         </a>
         <div className="workspace-label">YOUR WORKSPACE</div>
@@ -1699,7 +1699,7 @@ function App() {
                 {JSON.stringify(
                   {
                     mcpServers: {
-                      mythos: {
+                      arkhive: {
                         url: `${location.origin}/mcp`,
                         headers: { Authorization: "Bearer <発行したトークン>" },
                       },
