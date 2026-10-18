@@ -5,7 +5,12 @@ import app from "../src/server/index";
 import { hash } from "../src/server/auth";
 import { newCharacter } from "../src/shared/rules";
 import { canonicalOrigin, legacyOrigins } from "../src/shared/origins";
-import { opaqueWebp, alphaWebp } from "./image-fixtures";
+import {
+  opaqueWebp,
+  alphaWebp,
+  canvasSrgbWebp,
+  canvasP3Webp,
+} from "./image-fixtures";
 import { characterImageKey } from "../src/server/images";
 let proxy: PlatformProxy<CloudflareBindings>;
 const firstToken = "first-user-local-test-token";
@@ -101,6 +106,22 @@ const imageRequest = (
   );
 
 describe("private R2 character images", () => {
+  it.each([canvasSrgbWebp, canvasP3Webp])(
+    "accepts actual browser-compressed images with color profiles and reads them back from R2",
+    async (bytes) => {
+      const c = newCharacter();
+      await request(`/api/characters/${c.id}`, "PUT", c);
+      const response = await imageRequest(c.id, bytes);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        image: { width: 480, height: 640, size: bytes.length },
+      });
+      const stored = await request(`/api/characters/${c.id}/image`);
+      expect(stored.status).toBe(200);
+      expect(Buffer.from(await stored.arrayBuffer())).toEqual(bytes);
+      await request(`/api/characters/${c.id}`, "DELETE");
+    },
+  );
   it("stores compressed images, preserves references on stale saves, replaces and cleans up objects", async () => {
     const c = newCharacter();
     await request(`/api/characters/${c.id}`, "PUT", c);

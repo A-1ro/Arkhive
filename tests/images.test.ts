@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { compressImage } from "../src/client/compress-image";
 import { webpDimensions } from "../src/server/images";
-import { opaqueWebp, alphaWebp, losslessWebp } from "./image-fixtures";
+import {
+  opaqueWebp,
+  alphaWebp,
+  losslessWebp,
+  canvasSrgbWebp,
+  canvasP3Webp,
+} from "./image-fixtures";
 import { maxImageBytes } from "../src/shared/images";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -99,6 +105,8 @@ describe("WebP validation", () => {
     [opaqueWebp, 32, 48],
     [alphaWebp, 48, 32],
     [losslessWebp, 16, 24],
+    [canvasSrgbWebp, 480, 640],
+    [canvasP3Webp, 480, 640],
   ] as const)(
     "accepts static lossy, transparent, and lossless encodings",
     (bytes, width, height) => {
@@ -111,6 +119,12 @@ describe("WebP validation", () => {
   it("rejects a valid canvas header with an oversized actual image frame", () => {
     const bytes = Buffer.from(alphaWebp);
     bytes.writeUInt16LE(2048, bytes.indexOf("VP8 ") + 8 + 6);
+    expect(webpDimensions(Uint8Array.from(bytes).buffer)).toBeNull();
+  });
+  it("still rejects malformed color profile chunks", () => {
+    const bytes = Buffer.from(canvasSrgbWebp);
+    const offset = bytes.indexOf("ICCP");
+    bytes.writeUInt32LE(bytes.length, offset + 4);
     expect(webpDimensions(Uint8Array.from(bytes).buffer)).toBeNull();
   });
 });

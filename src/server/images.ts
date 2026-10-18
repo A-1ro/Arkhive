@@ -29,6 +29,7 @@ export function webpDimensions(buffer: ArrayBuffer) {
   let image: { width: number; height: number } | null = null;
   let canvas: { width: number; height: number } | null = null;
   let alpha = false;
+  let profile = false;
   for (let offset = 12; offset < bytes.length;) {
     if (offset + 8 > bytes.length) return null;
     const kind = tag(offset);
@@ -42,6 +43,11 @@ export function webpDimensions(buffer: ArrayBuffer) {
       const uint24 = (at: number) =>
         bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16);
       canvas = { width: uint24(start + 4) + 1, height: uint24(start + 7) + 1 };
+    } else if (kind === "ICCP") {
+      // Canvas encoders include a standard color profile even for sRGB images.
+      // It is valid WebP image data and must precede alpha and frame chunks.
+      if (!canvas || profile || alpha || image || size < 1) return null;
+      profile = true;
     } else if (kind === "ALPH") {
       if (!canvas || alpha || image || size < 1) return null;
       alpha = true;
@@ -68,7 +74,7 @@ export function webpDimensions(buffer: ArrayBuffer) {
         height: ((bits >>> 14) & 0x3fff) + 1,
       };
     } else {
-      // Reject animation, metadata, and arbitrary embedded payloads.
+      // Reject animation, EXIF/XMP metadata, and arbitrary embedded payloads.
       return null;
     }
     offset = end + (size % 2);
@@ -116,7 +122,10 @@ images.put("/:id/image", async (c) => {
   const dimensions = webpDimensions(buffer);
   if (!dimensions)
     return c.json(
-      { error: "長辺1,024px以下の静止WebP画像を送信してください" },
+      {
+        error:
+          "圧縮した画像を保存できませんでした。画像を選び直して再試行してください",
+      },
       400,
     );
   const id = c.req.param("id");
