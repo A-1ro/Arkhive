@@ -334,6 +334,48 @@ describe("D1 persistence and access control", () => {
       (await request("/api/characters", "GET", undefined, "invalid")).status,
     ).toBe(401);
   });
+  it("allows deleting a local-only character while logged in", async () => {
+    const c = newCharacter();
+    expect((await request(`/api/characters/${c.id}`)).status).toBe(404);
+    const response = await request(`/api/characters/${c.id}`, "DELETE");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect((await request(`/api/characters/${c.id}`)).status).toBe(404);
+  });
+  it("allows deleting a character already removed from the cloud", async () => {
+    const c = newCharacter();
+    expect((await request(`/api/characters/${c.id}`, "PUT", c)).status).toBe(
+      200,
+    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await request(`/api/characters/${c.id}`, "DELETE");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ ok: true });
+    }
+    expect((await request(`/api/characters/${c.id}`)).status).toBe(404);
+  });
+  it("keeps another owner's character and image when deleting a local copy", async () => {
+    const c = newCharacter();
+    expect((await request(`/api/characters/${c.id}`, "PUT", c)).status).toBe(
+      200,
+    );
+    expect((await imageRequest(c.id)).status).toBe(200);
+    const response = await request(
+      `/api/characters/${c.id}`,
+      "DELETE",
+      undefined,
+      secondToken,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect((await request(`/api/characters/${c.id}`)).status).toBe(200);
+    expect(
+      Buffer.from(
+        await (await request(`/api/characters/${c.id}/image`)).arrayBuffer(),
+      ),
+    ).toEqual(opaqueWebp);
+    await request(`/api/characters/${c.id}`, "DELETE");
+  });
   it("persists characters and enforces ownership on reads and writes", async () => {
     const c = newCharacter("7");
     c.name = "Ownership test";

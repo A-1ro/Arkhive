@@ -150,8 +150,8 @@ app.put("/api/characters/:id", async (c) => {
 app.delete("/api/characters/:id", async (c) => {
   const userId = c.get("user")!.id;
   const id = c.req.param("id");
-  if (!(await getCharacter(c.env.DB, userId, id)))
-    return c.json({ error: "探索者が見つかりません" }, 404);
+  // Local-only or already-deleted sheets must still be removable from the browser.
+  if (!(await getCharacter(c.env.DB, userId, id))) return c.json({ ok: true });
   await c.env.CHARACTER_IMAGES.delete(characterImageKey(userId, id));
   await c.env.DB.prepare("DELETE FROM characters WHERE id=? AND user_id=?")
     .bind(id, userId)
