@@ -8,7 +8,7 @@ import { canonicalOrigin, legacyOrigins } from "../src/shared/origins";
 let proxy: PlatformProxy<CloudflareBindings>;
 const firstToken = "first-user-local-test-token";
 const secondToken = "second-user-local-test-token";
-const bearer = "mythos_" + "1".repeat(64);
+const bearer = "ark_at_" + "1".repeat(64);
 const request = (
   path: string,
   method = "GET",
@@ -35,15 +35,17 @@ beforeAll(async () => {
     remoteBindings: false,
     envFiles: [],
   });
-  const sql = await readFile(
-    new URL("../migrations/0001_initial.sql", import.meta.url),
-    "utf8",
-  );
-  for (const statement of sql
-    .split(";")
-    .map((x) => x.trim())
-    .filter(Boolean))
-    await proxy.env.DB.prepare(statement).run();
+  for (const migration of ["0001_initial.sql", "0002_mcp_oauth.sql"]) {
+    const sql = await readFile(
+      new URL(`../migrations/${migration}`, import.meta.url),
+      "utf8",
+    );
+    for (const statement of sql
+      .split(";")
+      .map((x) => x.trim())
+      .filter(Boolean))
+      await proxy.env.DB.prepare(statement).run();
+  }
   for (const [id, token] of [
     ["first", firstToken],
     ["second", secondToken],
@@ -57,11 +59,17 @@ beforeAll(async () => {
       .bind(await hash(token), id, Date.now() + 60000)
       .run();
   }
-  await proxy.env.DB.prepare(
-    "INSERT INTO api_tokens(id,user_id,token_hash,name) VALUES (?,?,?,?)",
-  )
-    .bind("test-token", "first", await hash(bearer), "local-test")
-    .run();
+  await proxy.env.DB.batch([
+    proxy.env.DB.prepare(
+      "INSERT INTO oauth_clients(id,name,redirect_uris,auth_method,created_at) VALUES ('test-client','Test','[]','none',?)",
+    ).bind(Date.now()),
+    proxy.env.DB.prepare(
+      "INSERT INTO oauth_grants(id,user_id,client_id,resource,scope,created_at,expires_at) VALUES ('test-grant','first','test-client','https://mythos.test/mcp','mcp',?,?)",
+    ).bind(Date.now(), Date.now() + 60000),
+    proxy.env.DB.prepare(
+      "INSERT INTO oauth_tokens(token_hash,grant_id,kind,expires_at) VALUES (?,'test-grant','access',?)",
+    ).bind(await hash(bearer), Date.now() + 60000),
+  ]);
 }, 30000);
 afterAll(async () => {
   await proxy?.dispose();
@@ -228,23 +236,17 @@ describe("D1 persistence and access control", () => {
       ).status,
     ).toBe(404);
   });
-  it("issues hashed API tokens and revokes them", async () => {
-    const r = await request("/api/tokens", "POST", { name: "test client" });
-    expect(r.status).toBe(201);
-    const token = (await r.json()) as { id: string; token: string };
-    const row = await proxy.env.DB.prepare(
-      "SELECT token_hash FROM api_tokens WHERE id=?",
-    )
-      .bind(token.id)
-      .first<{ token_hash: string }>();
-    expect(row?.token_hash).not.toBe(token.token);
-    expect(row?.token_hash).toBe(await hash(token.token));
-    await request(`/api/tokens/${token.id}`, "DELETE");
+  it("retires manual API token issuance", async () => {
     expect(
-      await proxy.env.DB.prepare("SELECT id FROM api_tokens WHERE id=?")
-        .bind(token.id)
-        .first(),
-    ).toBeNull();
+      (await request("/api/tokens", "POST", { name: "test client" })).status,
+    ).toBe(410);
+    expect(
+      (
+        await request("/mcp", "POST", {}, firstToken, {
+          Authorization: "Bearer mythos_" + "1".repeat(64),
+        })
+      ).status,
+    ).toBe(401);
   });
   it("handles missing Discord configuration and invalid OAuth state safely", async () => {
     const res = await request("/auth/discord");

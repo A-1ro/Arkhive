@@ -2008,42 +2008,7 @@ h1 {
   border-radius: 4px;
   padding: 6px 8px;
 }
-.mcp-config {
-  font-size: 9px;
-  background: #f0ebf5;
-  color: #a18ab7;
-  line-height: 1.8;
-  padding: 16px;
-  border: 1px solid #e8dff1;
-  border-radius: 8px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-  margin-top: 22px;
-}
-.fresh-token {
-  margin: 20px 0;
-  padding: 15px;
-  border: 1px solid #d7cfdf;
-  border-radius: 8px;
-}
-.fresh-token strong {
-  font-size: 10px;
-  color: #a089b6;
-}
-.fresh-token textarea {
-  display: block;
-  width: 100%;
-  border: 1px solid #e5ddee;
-  color: #a68fba;
-  padding: 8px;
-  margin-top: 12px;
-  border-radius: 5px;
-  resize: none;
-  font: 10px monospace;
-  background: #faf7fd;
-}
-.token-row {
+.connection-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2052,7 +2017,7 @@ h1 {
   font-size: 11px;
   color: #ab96bf;
 }
-.token-row small {
+.connection-row small {
   display: block;
   font-size: 8px;
   margin-top: 5px;
@@ -3347,9 +3312,6 @@ h1 {
     gap: 11px;
   }
   .help-step small {
-    font-size: 8px;
-  }
-  .mcp-config {
     font-size: 8px;
   }
   .modal-primary {

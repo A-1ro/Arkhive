@@ -157,11 +157,9 @@ function App() {
   const [rolling, setRolling] = useState<string | null>(null);
   const [lastRoll, setLastRoll] = useState("");
   const [newEdition, setNewEdition] = useState<Edition>("7");
-  const [tokens, setTokens] = useState<
-    { id: string; name: string; created_at: string }[]
+  const [connections, setConnections] = useState<
+    { id: string; name: string; created_at: number; expires_at: number }[]
   >([]);
-  const [freshToken, setFreshToken] = useState("");
-  const [tokenBusy, setTokenBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const c = sheets.find((x) => x.id === activeId) || sheets[0];
@@ -252,8 +250,8 @@ function App() {
   }, [sheets, legacyImported]);
   useEffect(() => {
     if (modal !== "mcp" || !user) return;
-    void api<typeof tokens>("/api/tokens")
-      .then(setTokens)
+    void api<typeof connections>("/api/connections")
+      .then(setConnections)
       .catch((e) => notify(e.message, "error"));
   }, [modal, user]);
   useEffect(() => {
@@ -543,8 +541,7 @@ function App() {
                 onClick={async () => {
                   await api("/auth/logout", { method: "POST" });
                   setUser(null);
-                  setFreshToken("");
-                  setTokens([]);
+                  setConnections([]);
                   notify("ログアウトしました");
                 }}
                 title="ログアウト"
@@ -1577,7 +1574,7 @@ function App() {
                 <p>
                   <b>MCP連携</b>
                   <small>
-                    MCP連携から専用トークンを発行して、対応するAIクライアントに設定。
+                    ChatGPTやClaudeにMCPのURLを追加し、接続時にDiscordでログインして連携を許可。
                   </small>
                 </p>
               </div>
@@ -1619,7 +1616,7 @@ function App() {
                 <span>MCP SERVER</span>
               </div>
               <p className="modal-description">
-                AIから探索者を作成・取得・更新。Discordでログインして発行したトークンで、あなたの探索者だけにアクセスできます。
+                ChatGPTやClaudeから探索者を作成・取得・更新。接続時にDiscordでログインして、あなたの探索者へのアクセスを許可します。
               </p>
               <Field label="MCPエンドポイント">
                 <div className="copy-input">
@@ -1654,115 +1651,77 @@ function App() {
                   <code key={x}>{x}</code>
                 ))}
               </div>
+              <div className="help-step">
+                <span>01</span>
+                <p>
+                  <b>クライアントにURLを追加</b>
+                  <small>
+                    ChatGPTやClaudeのMCP連携設定に、上のエンドポイントを登録します。認証方式を選べる場合はOAuthを指定してください。
+                  </small>
+                </p>
+              </div>
+              <div className="help-step">
+                <span>02</span>
+                <p>
+                  <b>Discordでログインして連携</b>
+                  <small>
+                    接続元と許可する操作を確認し、「Discordでログインして連携」へ進みます。ログイン済みの場合は「連携を許可」で完了します。
+                  </small>
+                </p>
+              </div>
+              <div className="info-note">
+                クラウドに保存した探索者を利用できます。端末だけに保存している探索者は、先に「クラウドに保存」してください。
+              </div>
               {user ? (
                 <>
-                  <button
-                    className="button button-primary modal-primary"
-                    disabled={tokenBusy}
-                    onClick={async () => {
-                      setTokenBusy(true);
-                      try {
-                        const t = await api<{
-                          id: string;
-                          token: string;
-                          name: string;
-                        }>("/api/tokens", {
-                          method: "POST",
-                          body: JSON.stringify({
-                            name: `MCP ${new Date().toLocaleDateString("ja-JP")}`,
-                          }),
-                        });
-                        setFreshToken(t.token);
-                        setTokens(await api<typeof tokens>("/api/tokens"));
-                      } catch (e) {
-                        notify((e as Error).message, "error");
-                      } finally {
-                        setTokenBusy(false);
-                      }
-                    }}
-                  >
-                    <Plus size={16} />
-                    接続トークンを発行
-                  </button>
-                  {freshToken && (
-                    <div className="fresh-token">
-                      <strong>このトークンは一度だけ表示します。</strong>
-                      <textarea
-                        readOnly
-                        value={freshToken}
-                        rows={2}
-                        aria-label="発行したMCPトークン"
-                      />
-                      <button
-                        className="text-button"
-                        onClick={() =>
-                          void navigator.clipboard
-                            .writeText(freshToken)
-                            .then(() => notify("トークンをコピーしました"))
-                            .catch(() =>
-                              notify(
-                                "コピーできません。トークンを選択してください",
-                                "error",
-                              ),
-                            )
-                        }
-                      >
-                        トークンをコピー
-                        <Link2 size={14} />
-                      </button>
-                    </div>
+                  <h3>接続済みアプリ</h3>
+                  {!connections.length && (
+                    <p className="modal-description">
+                      接続済みのアプリはありません。
+                    </p>
                   )}
-                  {tokens.map((t) => (
-                    <div className="token-row" key={t.id}>
+                  {connections.map((connection) => (
+                    <div className="connection-row" key={connection.id}>
                       <span>
-                        {t.name}
+                        {connection.name}
                         <small>
-                          {new Date(t.created_at).toLocaleDateString("ja-JP")}
+                          {new Date(connection.created_at).toLocaleDateString(
+                            "ja-JP",
+                          )}{" "}
+                          に連携
                         </small>
                       </span>
                       <button
                         className="text-button text-error"
                         onClick={async () => {
                           try {
-                            await api(`/api/tokens/${t.id}`, {
+                            await api(`/api/connections/${connection.id}`, {
                               method: "DELETE",
                             });
-                            setTokens((xs) => xs.filter((x) => x.id !== t.id));
-                            setFreshToken("");
-                            notify("トークンを失効しました");
+                            setConnections((xs) =>
+                              xs.filter((x) => x.id !== connection.id),
+                            );
+                            notify("アプリの連携を解除しました");
                           } catch (e) {
                             notify((e as Error).message, "error");
                           }
                         }}
                       >
-                        失効
+                        連携解除
                       </button>
                     </div>
                   ))}
                 </>
               ) : (
                 <div className="info-note">
-                  トークンの発行にはDiscordログインが必要です。
-                  <a href="/auth/discord">ログインする →</a>
+                  接続済みアプリの確認・解除は、
+                  <a href="/auth/discord">Discordでログイン</a>
+                  すると利用できます。
                 </div>
               )}
-              <pre className="mcp-config">
-                {JSON.stringify(
-                  {
-                    mcpServers: {
-                      arkhive: {
-                        url: `${location.origin}/mcp`,
-                        headers: { Authorization: "Bearer <発行したトークン>" },
-                      },
-                    },
-                  },
-                  null,
-                  2,
-                )}
-              </pre>
               <p className="copyright">
                 Streamable HTTP /
-                Bearer認証対応のMCPクライアントで利用できます。自動OAuth接続には対応していません。
+                OAuth対応。連携の有効期間は30日です。期限が切れたらクライアントから再連携してください。
               </p>
             </>
           )}

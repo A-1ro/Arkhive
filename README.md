@@ -7,7 +7,7 @@
 - Hono / Cloudflare Workers / Cloudflare D1
 - React / TypeScript / Vite
 - Discord OAuth2（identifyのみ）
-- MCP Streamable HTTP（ユーザー別Bearerトークン）
+- MCP Streamable HTTP（DiscordログインによるOAuth連携）
 
 ## 機能
 
@@ -44,7 +44,7 @@ npm run build
 npm test
 ```
 
-結合テストはWranglerの独立したローカルD1で実行し、本番データは変更しません。テスト対象は版別計算、ポイント制限、保存・更新、所有権、期限切れセッション、CSRF、不正入力、MCPの接続・探索者作成、トークンのハッシュ保存・失効です。
+結合テストはWranglerの独立したローカルD1で実行し、本番データは変更しません。テスト対象は版別計算、ポイント制限、保存・更新、所有権、期限切れセッション、CSRF、不正入力、MCPの接続・探索者作成、OAuth認可・PKCE・認証コードの再利用防止・更新・連携解除です。
 
 ## 公開
 
@@ -63,7 +63,7 @@ GitHub Actionsでは型検査・ビルド・テストを実行します。Cloudf
 
 ## Discordログインの有効化
 
-アプリ作成は利用者本人が行います。認証コードは実装済みですが、Client ID / Client Secretを登録するまではログインとクラウド保存・MCPトークン発行は利用できません。
+アプリ作成は利用者本人が行います。認証コードは実装済みですが、Client ID / Client Secretを登録するまではログインとクラウド保存・MCP連携は利用できません。
 
 1. [Discord Developer Portal](https://discord.com/developers/applications)でアプリを作成。
 2. OAuth2 → Redirectsに以下を登録して保存。
@@ -88,22 +88,25 @@ OAuth2はstate照合、10分のstate Cookie、HttpOnly / Secure / SameSite=Lax�
 
 ## MCP接続
 
-公開サイトの「MCP連携」からDiscordログイン後にトークンを発行します。トークンは発行時のみ表示し、D1にはSHA-256のハッシュのみ保存します。トークンは画面から失効できます。
+ChatGPTやClaudeなど、OAuth対応のリモートMCPクライアントから接続します。
 
-Bearerヘッダー付きStreamable HTTPに対応したMCPクライアントへ設定してください。OAuthによる自動登録には対応しません。
+1. クライアントのMCP連携設定に以下のURLを追加します。認証方式を選べる場合は **OAuth** を指定してください。
 
-```json
-{
-  "mcpServers": {
-    "arkhive": {
-      "url": "https://arkhive.hiyori-schedule.com/mcp",
-      "headers": {
-        "Authorization": "Bearer <発行したトークン>"
-      }
-    }
-  }
-}
-```
+   ```text
+   https://arkhive.hiyori-schedule.com/mcp
+   ```
+
+2. Arkhiveの許可画面で、接続元の名前・リダイレクト先・操作を確認します。
+3. 「Discordでログインして連携」からDiscordログインを完了すると、クライアントへ戻ります。ログイン済みの場合は「連携を許可」で完了します。
+4. サイトと同じDiscordアカウントの探索者を利用できます。端末内の探索者は、あらかじめクラウドへ保存してください。
+
+手動のトークン発行・コピーは不要です。接続済みアプリは、サイトでログインして「MCP連携」から個別に解除できます。連携は30日で期限切れになり、再連携が必要です。クライアントの設定画面や利用可否は、契約プラン・管理者設定に依存します。
+
+実装はOAuth認可コード + PKCE（S256）、動的クライアント登録（DCR）、Protected Resource / Authorization Serverメタデータ、自動更新・失効に対応しています。アクセストークンは最長1時間、認可コードは1分、ログイン前の連携リクエストは10分で失効します。資格情報はD1にハッシュのみ保存し、DiscordのアクセストークンはMCPクライアントに渡しません。更新資格情報は毎回ローテーションし、再利用を検出した連携は失効します。
+
+既存環境では、公開前に `npm run db:remote` で `0002_mcp_oauth.sql` を適用してください。以前の手動トークンは削除・無効化され、クライアント側でOAuthによる再連携が必要です。DiscordのRedirectsは既存の `/auth/discord/callback` を引き続き使うため、追加登録は不要です。
+
+参考：[OpenAIのMCP認証要件](https://developers.openai.com/plugins/build/auth)、[MCP認可仕様](https://modelcontextprotocol.io/specification/latest/basic/authorization)。
 
 | ツール             | 内容                                           |
 | ------------------ | ---------------------------------------------- |

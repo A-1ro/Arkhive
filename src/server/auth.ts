@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { Hono } from "hono";
+import { timingSafeEqual } from "node:crypto";
 export type User = { id: string; name: string; avatar: string | null };
 export type Env = {
   Bindings: CloudflareBindings & {
@@ -17,6 +18,16 @@ export async function hash(value: string) {
     ),
     (b) => b.toString(16).padStart(2, "0"),
   ).join("");
+}
+export async function matchesHash(value: string, expectedHash: string) {
+  const actualHash = await hash(value);
+  return (
+    expectedHash.length === actualHash.length &&
+    timingSafeEqual(
+      new TextEncoder().encode(actualHash),
+      new TextEncoder().encode(expectedHash),
+    )
+  );
 }
 export function randomToken() {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
@@ -47,6 +58,14 @@ auth.get("/discord", async (c) => {
     ...cookieOptions(c),
     maxAge: 600,
   });
+  const returnTo = c.req.query("return_to");
+  deleteCookie(c, "mythos_login_return", { path: "/" });
+  if (returnTo && /^\/oauth\/complete\?request=[a-f0-9]{64}$/.test(returnTo)) {
+    setCookie(c, "mythos_login_return", returnTo, {
+      ...cookieOptions(c),
+      maxAge: 600,
+    });
+  }
   const redirect =
     c.env.DISCORD_REDIRECT_URI ||
     `${new URL(c.req.url).origin}/auth/discord/callback`;
@@ -62,11 +81,13 @@ auth.get("/discord", async (c) => {
 auth.get("/discord/callback", async (c) => {
   const expected = getCookie(c, "mythos_oauth_state");
   const state = c.req.query("state");
+  const returnTo = getCookie(c, "mythos_login_return");
   deleteCookie(c, "mythos_oauth_state", { path: "/" });
+  deleteCookie(c, "mythos_login_return", { path: "/" });
   if (
     !expected ||
     !state ||
-    (await hash(expected)) !== (await hash(state)) ||
+    !(await matchesHash(state, await hash(expected))) ||
     !c.req.query("code")
   )
     return c.redirect("/?auth=failed");
@@ -117,7 +138,11 @@ auth.get("/discord/callback", async (c) => {
       ...cookieOptions(c),
       maxAge: 30 * 86400,
     });
-    return c.redirect("/?auth=success");
+    return c.redirect(
+      returnTo && /^\/oauth\/complete\?request=[a-f0-9]{64}$/.test(returnTo)
+        ? returnTo
+        : "/?auth=success",
+    );
   } catch {
     return c.redirect("/?auth=failed");
   }

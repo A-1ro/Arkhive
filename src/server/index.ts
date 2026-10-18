@@ -2,21 +2,21 @@ import { Hono } from "hono";
 import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
-import { z, ZodError } from "zod";
-import {
-  auth,
-  hash,
-  randomToken,
-  sessionUser,
-  type Env,
-  type User,
-} from "./auth";
+import { cors } from "hono/cors";
+import { ZodError } from "zod";
+import { auth, sessionUser, type Env } from "./auth";
+import { oauth, mcpUser } from "./oauth";
 import { listCharacters, getCharacter, saveCharacter } from "./storage";
 import { handleMcp } from "./mcp";
 import legacy from "./legacy";
 import { legacyOrigins } from "../shared/origins";
 
 const app = new Hono<Env>();
+const mcpOrigins = [
+  "https://chatgpt.com",
+  "https://claude.ai",
+  "https://claude.com",
+];
 app.use("*", async (c, next) => {
   if (legacyOrigins.some((origin) => origin === new URL(c.req.url).origin)) {
     return legacy.fetch(c.req.raw);
@@ -46,15 +46,48 @@ app.use(
     onError: (c) => c.json({ error: "データサイズが大きすぎます" }, 413),
   }),
 );
+app.use(
+  "/mcp",
+  cors({
+    origin: mcpOrigins,
+    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowHeaders: [
+      "Authorization",
+      "Content-Type",
+      "MCP-Protocol-Version",
+      "Mcp-Session-Id",
+    ],
+    exposeHeaders: [
+      "WWW-Authenticate",
+      "MCP-Protocol-Version",
+      "Mcp-Session-Id",
+    ],
+  }),
+);
 app.use("*", async (c, next) => {
-  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
+  if (
+    c.req.path === "/mcp" ||
+    !["GET", "HEAD", "OPTIONS"].includes(c.req.method)
+  ) {
+    // OAuth machine endpoints authenticate the client independently of cookies.
+    if (
+      ["/oauth/register", "/oauth/token", "/oauth/revoke"].includes(c.req.path)
+    ) {
+      await next();
+      return;
+    }
     const origin = c.req.header("Origin");
     const expected = new URL(c.req.url).origin;
     // Vite development proxy has the configured callback origin.
     const redirectOrigin = c.env.DISCORD_REDIRECT_URI
       ? new URL(c.env.DISCORD_REDIRECT_URI).origin
       : null;
-    if (origin && origin !== expected && origin !== redirectOrigin)
+    if (
+      origin &&
+      origin !== expected &&
+      origin !== redirectOrigin &&
+      !(c.req.path === "/mcp" && mcpOrigins.includes(origin))
+    )
       return c.json({ error: "許可されていないオリジンです" }, 403);
   }
   await next();
@@ -69,6 +102,7 @@ app.use("/auth/*", async (c, next) => {
   await next();
 });
 app.route("/auth", auth);
+app.route("/", oauth);
 app.get("/api/health", async (c) => {
   await c.env.DB.prepare("SELECT 1").first();
   return c.json({ ok: true, database: "D1" });
@@ -117,60 +151,45 @@ app.delete("/api/characters/:id", async (c) => {
     .run();
   return c.json({ ok: true });
 });
-app.use("/api/tokens*", async (c, next) => {
+app.use("/api/connections*", async (c, next) => {
   if (!c.get("user"))
     return c.json({ error: "Discordログインが必要です" }, 401);
   await next();
 });
-app.get("/api/tokens", async (c) => {
+app.get("/api/connections", async (c) => {
   const r = await c.env.DB.prepare(
-    "SELECT id,name,created_at FROM api_tokens WHERE user_id=? ORDER BY created_at DESC",
+    "SELECT g.id,c.name,g.created_at,g.expires_at FROM oauth_grants g JOIN oauth_clients c ON c.id=g.client_id WHERE g.user_id=? AND g.expires_at>? ORDER BY g.created_at DESC",
   )
-    .bind(c.get("user")!.id)
+    .bind(c.get("user")!.id, Date.now())
     .all();
   return c.json(r.results);
 });
-app.post("/api/tokens", async (c) => {
-  const body = z
-    .object({ name: z.string().min(1).max(100) })
-    .parse(await c.req.json());
-  const count = await c.env.DB.prepare(
-    "SELECT count(*) as n FROM api_tokens WHERE user_id=?",
-  )
-    .bind(c.get("user")!.id)
-    .first<{ n: number }>();
-  if ((count?.n || 0) >= 10)
-    return c.json({ error: "トークンは10個までです" }, 400);
-  const token = `mythos_${randomToken()}`;
-  const id = crypto.randomUUID();
-  await c.env.DB.prepare(
-    "INSERT INTO api_tokens (id,user_id,token_hash,name) VALUES (?,?,?,?)",
-  )
-    .bind(id, c.get("user")!.id, await hash(token), body.name)
-    .run();
-  return c.json({ id, token, name: body.name }, 201);
-});
-app.delete("/api/tokens/:id", async (c) => {
-  await c.env.DB.prepare("DELETE FROM api_tokens WHERE id=? AND user_id=?")
+app.delete("/api/connections/:id", async (c) => {
+  await c.env.DB.prepare("DELETE FROM oauth_grants WHERE id=? AND user_id=?")
     .bind(c.req.param("id"), c.get("user")!.id)
     .run();
   return c.json({ ok: true });
 });
+app.all("/api/tokens*", (c) =>
+  c.json(
+    {
+      error:
+        "手動トークン発行は終了しました。クライアントからDiscordログインで連携してください",
+    },
+    410,
+  ),
+);
 app.all("/mcp", async (c) => {
   c.header("Cache-Control", "no-store");
-  const bearer = c.req
-    .header("Authorization")
-    ?.match(/^Bearer (mythos_[a-f0-9]{64})$/)?.[1];
-  if (!bearer)
-    return c.json({ error: "MCP設定で発行したBearerトークンが必要です" }, 401, {
-      "WWW-Authenticate": 'Bearer realm="Arkhive"',
-    });
-  const user = await c.env.DB.prepare(
-    "SELECT u.id,u.name,u.avatar FROM api_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=?",
-  )
-    .bind(await hash(bearer))
-    .first<User>();
-  if (!user) return c.json({ error: "無効なトークンです" }, 401);
+  const user = await mcpUser(c);
+  if (!user)
+    return c.json(
+      { error: "DiscordログインでMCP連携を許可してください" },
+      401,
+      {
+        "WWW-Authenticate": `Bearer resource_metadata="${new URL(c.req.url).origin}/.well-known/oauth-protected-resource/mcp", scope="mcp"${c.req.header("Authorization") ? ', error="invalid_token"' : ""}`,
+      },
+    );
   if (c.req.method !== "POST")
     return c.json({ error: "POSTのみ対応しています" }, 405, { Allow: "POST" });
   return handleMcp(c.req.raw, c.env.DB, user.id);
@@ -206,6 +225,8 @@ app.get("*", async (c) => {
   if (
     c.req.path.startsWith("/api/") ||
     c.req.path.startsWith("/auth/") ||
+    c.req.path.startsWith("/oauth/") ||
+    c.req.path.startsWith("/.well-known/") ||
     c.req.path === "/mcp"
   ) {
     return c.json({ error: "Not found" }, 404);
