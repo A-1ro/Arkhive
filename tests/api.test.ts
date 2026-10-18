@@ -5,6 +5,8 @@ import app from "../src/server/index";
 import { hash } from "../src/server/auth";
 import { newCharacter } from "../src/shared/rules";
 import { canonicalOrigin, legacyOrigins } from "../src/shared/origins";
+import { opaqueWebp, alphaWebp } from "./image-fixtures";
+import { characterImageKey } from "../src/server/images";
 let proxy: PlatformProxy<CloudflareBindings>;
 const firstToken = "first-user-local-test-token";
 const secondToken = "second-user-local-test-token";
@@ -35,7 +37,11 @@ beforeAll(async () => {
     remoteBindings: false,
     envFiles: [],
   });
-  for (const migration of ["0001_initial.sql", "0002_mcp_oauth.sql"]) {
+  for (const migration of [
+    "0001_initial.sql",
+    "0002_mcp_oauth.sql",
+    "0003_character_images.sql",
+  ]) {
     const sql = await readFile(
       new URL(`../migrations/${migration}`, import.meta.url),
       "utf8",
@@ -73,6 +79,179 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => {
   await proxy?.dispose();
+});
+const imageRequest = (
+  id: string,
+  body: Uint8Array = opaqueWebp,
+  cookie = firstToken,
+  headers: Record<string, string> = {},
+) =>
+  app.request(
+    `https://mythos.test/api/characters/${id}/image`,
+    {
+      method: "PUT",
+      headers: {
+        Cookie: `mythos_session=${cookie}`,
+        "Content-Type": "image/webp",
+        ...headers,
+      },
+      body,
+    },
+    proxy.env,
+  );
+
+describe("private R2 character images", () => {
+  it("stores compressed images, preserves references on stale saves, replaces and cleans up objects", async () => {
+    const c = newCharacter();
+    await request(`/api/characters/${c.id}`, "PUT", c);
+    expect((await request(`/api/characters/${c.id}/image`)).status).toBe(404);
+    const upload = await imageRequest(c.id);
+    expect(upload.status).toBe(200);
+    const { image } = (await upload.json()) as {
+      image: { version: string; size: number; width: number; height: number };
+    };
+    expect(image).toMatchObject({
+      size: opaqueWebp.length,
+      width: 32,
+      height: 48,
+    });
+    const response = await request(
+      `/api/characters/${c.id}/image?v=${image.version}`,
+    );
+    expect(response.headers.get("Content-Type")).toBe("image/webp");
+    expect(response.headers.get("Cache-Control")).toContain("no-store");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(opaqueWebp);
+    expect(
+      await (await request(`/api/characters/${c.id}`)).json(),
+    ).toHaveProperty("image", image);
+    expect(await (await request("/api/characters")).json()).toContainEqual(
+      expect.objectContaining({ id: c.id, image }),
+    );
+    // Both browser and MCP saves use this path; their JSON cannot unset or forge an attachment.
+    c.name = "Updated after upload";
+    const saved = await request(`/api/characters/${c.id}`, "PUT", c);
+    expect(await saved.json()).toMatchObject({ name: c.name, image });
+    c.image = { ...image, version: crypto.randomUUID() };
+    expect(
+      await (await request(`/api/characters/${c.id}`, "PUT", c)).json(),
+    ).toHaveProperty("image", image);
+    const replacement = await imageRequest(c.id, alphaWebp);
+    const replaced = (await replacement.json()) as {
+      image: { version: string };
+    };
+    expect(replacement.status).toBe(200);
+    expect(replaced.image.version).not.toBe(image.version);
+    expect(
+      (
+        await proxy.env.CHARACTER_IMAGES.list({
+          prefix: characterImageKey("first", c.id),
+        })
+      ).objects,
+    ).toHaveLength(1);
+    expect(
+      Buffer.from(
+        await (await request(`/api/characters/${c.id}/image`)).arrayBuffer(),
+      ),
+    ).toEqual(alphaWebp);
+    expect(
+      (await request(`/api/characters/${c.id}/image`, "DELETE")).status,
+    ).toBe(200);
+    expect(
+      await (await request(`/api/characters/${c.id}`)).json(),
+    ).toHaveProperty("image", null);
+    expect(
+      await proxy.env.CHARACTER_IMAGES.head(characterImageKey("first", c.id)),
+    ).toBeNull();
+    await imageRequest(c.id);
+    await request(`/api/characters/${c.id}`, "DELETE");
+    expect(
+      await proxy.env.CHARACTER_IMAGES.head(characterImageKey("first", c.id)),
+    ).toBeNull();
+  });
+  it("requires ownership and rejects CSRF for every image operation", async () => {
+    const c = newCharacter();
+    await request(`/api/characters/${c.id}`, "PUT", c);
+    await imageRequest(c.id);
+    for (const method of ["GET", "DELETE"]) {
+      expect(
+        (await request(`/api/characters/${c.id}/image`, method, undefined, ""))
+          .status,
+      ).toBe(401);
+      expect(
+        (
+          await request(
+            `/api/characters/${c.id}/image`,
+            method,
+            undefined,
+            secondToken,
+          )
+        ).status,
+      ).toBe(404);
+    }
+    expect((await imageRequest(c.id, opaqueWebp, "")).status).toBe(401);
+    expect((await imageRequest(c.id, opaqueWebp, secondToken)).status).toBe(
+      404,
+    );
+    expect(
+      (
+        await imageRequest(c.id, opaqueWebp, firstToken, {
+          Origin: "https://evil.test",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(
+          `/api/characters/${c.id}/image`,
+          "DELETE",
+          undefined,
+          firstToken,
+          { Origin: "https://evil.test" },
+        )
+      ).status,
+    ).toBe(403);
+    expect((await imageRequest(crypto.randomUUID())).status).toBe(404);
+    expect(
+      Buffer.from(
+        await (await request(`/api/characters/${c.id}/image`)).arrayBuffer(),
+      ),
+    ).toEqual(opaqueWebp);
+    await request(`/api/characters/${c.id}`, "DELETE");
+  });
+  it("rejects oversized, spoofed, malformed, and animated uploads without replacing the saved image", async () => {
+    const c = newCharacter();
+    await request(`/api/characters/${c.id}`, "PUT", c);
+    await imageRequest(c.id);
+    expect(
+      (
+        await imageRequest(c.id, opaqueWebp, firstToken, {
+          "Content-Type": "image/png",
+        })
+      ).status,
+    ).toBe(415);
+    expect(
+      (await imageRequest(c.id, new Uint8Array(256 * 1024 + 1))).status,
+    ).toBe(413);
+    const largeDimensions = Buffer.from(opaqueWebp);
+    largeDimensions.writeUInt16LE(1025, 26);
+    const animated = Buffer.from(alphaWebp);
+    animated[20] |= 2;
+    for (const invalid of [
+      new Uint8Array(),
+      Buffer.from("not an image"),
+      opaqueWebp.subarray(0, 25),
+      largeDimensions,
+      animated,
+    ])
+      expect((await imageRequest(c.id, invalid)).status).toBe(400);
+    expect(
+      Buffer.from(
+        await (await request(`/api/characters/${c.id}/image`)).arrayBuffer(),
+      ),
+    ).toEqual(opaqueWebp);
+    await request(`/api/characters/${c.id}`, "DELETE");
+  });
 });
 describe("D1 persistence and access control", () => {
   it("serves immutable asset responses with security headers", async () => {

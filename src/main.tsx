@@ -58,6 +58,8 @@ import {
   type StatKey,
 } from "./shared/rules";
 import "./style.css";
+import { compressImage } from "./client/compress-image";
+import { imageUrl } from "./shared/images";
 import {
   legacyImportKey,
   mergeDrafts,
@@ -149,6 +151,7 @@ function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [menu, setMenu] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [imageBusy, setImageBusy] = useState<string | null>(null);
   const [localError, setLocalError] = useState(false);
   const [legacyImported, setLegacyImported] = useState(false);
   const [search, setSearch] = useState("");
@@ -161,8 +164,10 @@ function App() {
     { id: string; name: string; created_at: number; expires_at: number }[]
   >([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const c = sheets.find((x) => x.id === activeId) || sheets[0];
+  const portraitUrl = user && c.image ? imageUrl(c.id, c.image.version) : null;
   const d = derived(c);
   const op = occupationPoints(c),
     ip = interestPoints(c);
@@ -334,6 +339,85 @@ function App() {
       setSaving(false);
     }
   }
+  async function uploadImage(file?: File) {
+    if (!file || !user || imageBusy || saving) return;
+    if (errors.length) {
+      notify(errors.join("・"), "error");
+      return;
+    }
+    setImageBusy(c.id);
+    try {
+      const blob = await compressImage(file);
+      // A locally created character must exist in D1 before its image is attached.
+      const saved = await api<Character>(`/api/characters/${c.id}`, {
+        method: "PUT",
+        body: JSON.stringify(c),
+      });
+      setSheets((xs) =>
+        xs.map((x) =>
+          x.id === c.id && x.updatedAt === c.updatedAt ? saved : x,
+        ),
+      );
+      const result = await api<Pick<Character, "image" | "updatedAt">>(
+        `/api/characters/${c.id}/image`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "image/webp" },
+          body: blob,
+        },
+      );
+      setSheets((xs) =>
+        xs.map((x) =>
+          x.id === c.id
+            ? {
+                ...x,
+                image: result.image,
+                updatedAt:
+                  x.updatedAt > result.updatedAt
+                    ? x.updatedAt
+                    : result.updatedAt,
+              }
+            : x,
+        ),
+      );
+      notify(
+        `画像を圧縮して登録しました（${Math.ceil(blob.size / 1024)}KB）。探索者もクラウドへ保存しました`,
+      );
+    } catch (e) {
+      notify((e as Error).message, "error");
+    } finally {
+      setImageBusy(null);
+    }
+  }
+  async function removeImage() {
+    if (!user || imageBusy || saving) return;
+    setImageBusy(c.id);
+    try {
+      const result = await api<Pick<Character, "image" | "updatedAt">>(
+        `/api/characters/${c.id}/image`,
+        { method: "DELETE" },
+      );
+      setSheets((xs) =>
+        xs.map((x) =>
+          x.id === c.id
+            ? {
+                ...x,
+                image: null,
+                updatedAt:
+                  x.updatedAt > result.updatedAt
+                    ? x.updatedAt
+                    : result.updatedAt,
+              }
+            : x,
+        ),
+      );
+      notify("画像を削除しました");
+    } catch (e) {
+      notify((e as Error).message, "error");
+    } finally {
+      setImageBusy(null);
+    }
+  }
   function exportJSON() {
     const a = document.createElement("a");
     const url = URL.createObjectURL(
@@ -354,6 +438,7 @@ function App() {
     try {
       const parsed = characterSchema.parse(JSON.parse(await file.text()));
       parsed.id = crypto.randomUUID();
+      parsed.image = null;
       parsed.updatedAt = new Date().toISOString();
       setSheets((xs) => [parsed, ...xs]);
       setActiveId(parsed.id);
@@ -602,7 +687,7 @@ function App() {
               <button
                 className="button button-primary"
                 onClick={() => void save()}
-                disabled={saving}
+                disabled={saving || !!imageBusy}
               >
                 {saving ? (
                   <LoaderCircle className="spin" size={16} />
@@ -637,6 +722,77 @@ function App() {
                       sub="探索者名や職業などを入力してください。"
                     />
                     <div className="profile-layout">
+                      <div
+                        className="character-image-editor"
+                        aria-busy={imageBusy === c.id}
+                      >
+                        <div className="character-portrait">
+                          {portraitUrl ? (
+                            <img
+                              key={portraitUrl}
+                              src={portraitUrl}
+                              alt={`${c.name || "探索者"}の画像`}
+                            />
+                          ) : (
+                            <UserRound
+                              size={48}
+                              strokeWidth={1}
+                              aria-hidden="true"
+                            />
+                          )}
+                        </div>
+                        <div className="character-image-controls">
+                          <span className="character-image-label">
+                            探索者の画像
+                          </span>
+                          {user ? (
+                            <>
+                              <button
+                                className="button button-white"
+                                onClick={() => imageRef.current?.click()}
+                                disabled={!!imageBusy || saving}
+                              >
+                                {imageBusy === c.id ? (
+                                  <LoaderCircle size={15} className="spin" />
+                                ) : (
+                                  <Upload size={15} />
+                                )}
+                                {imageBusy === c.id
+                                  ? "処理中…"
+                                  : c.image
+                                    ? "画像を変更"
+                                    : "画像を登録"}
+                              </button>
+                              {c.image && (
+                                <button
+                                  className="text-button text-error"
+                                  onClick={() => void removeImage()}
+                                  disabled={!!imageBusy || saving}
+                                >
+                                  <Trash2 size={14} />
+                                  画像を削除
+                                </button>
+                              )}
+                              <p>
+                                JPEG・PNG・WebP / 20MBまで
+                                <br />
+                                自動圧縮して保存します。画像の登録時に探索者もクラウドへ保存します。
+                              </p>
+                              {c.image && (
+                                <small>
+                                  {c.image.width} × {c.image.height}px ·{" "}
+                                  {Math.ceil(c.image.size / 1024)}KB
+                                </small>
+                              )}
+                            </>
+                          ) : (
+                            <p>
+                              <a href="/auth/discord">Discordでログイン</a>
+                              すると画像を登録できます。
+                            </p>
+                          )}
+                        </div>
+                      </div>
                       <div className="form-grid">
                         <Field label="探索者名" hint="NAME" wide>
                           <input
@@ -1295,7 +1451,15 @@ function App() {
                 </div>
                 <div className="summary-identity">
                   <div className="summary-avatar">
-                    <UserRound size={28} strokeWidth={1.3} />
+                    {portraitUrl ? (
+                      <img
+                        key={portraitUrl}
+                        src={portraitUrl}
+                        alt="探索者の画像"
+                      />
+                    ) : (
+                      <UserRound size={28} strokeWidth={1.3} />
+                    )}
                     <span />
                   </div>
                   <h3>{c.name || "名前のない探索者"}</h3>
@@ -1428,6 +1592,18 @@ function App() {
       </div>
       <input
         type="file"
+        ref={imageRef}
+        hidden
+        aria-label="探索者の画像を選択"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          void uploadImage(file);
+        }}
+      />
+      <input
+        type="file"
         ref={fileRef}
         hidden
         accept=".json,application/json"
@@ -1536,6 +1712,7 @@ function App() {
                 <button
                   className="button button-danger"
                   onClick={() => void remove()}
+                  disabled={!!imageBusy || saving}
                 >
                   <Trash2 size={16} />
                   削除する
@@ -1745,6 +1922,13 @@ function App() {
                   <Logo />
                   <span>クトゥルフ神話TRPG 第{c.edition}版</span>
                 </div>
+                {portraitUrl && (
+                  <img
+                    className="print-portrait"
+                    src={portraitUrl}
+                    alt={`${c.name || "探索者"}の画像`}
+                  />
+                )}
                 <h2>{c.name || "名前のない探索者"}</h2>
                 <p>
                   {c.occupation || "職業未設定"} · {c.age}歳 · {c.gender} ·

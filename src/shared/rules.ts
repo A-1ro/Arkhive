@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { maxImageBytes, maxImageDimension } from "./images";
 
 export const statKeys = [
   "STR",
@@ -43,6 +44,15 @@ export const characterSchema = z.object({
   gender: z.string().max(50),
   birthplace: z.string().max(100),
   residence: z.string().max(100),
+  image: z
+    .object({
+      version: z.string().uuid(),
+      size: z.number().int().min(1).max(maxImageBytes),
+      width: z.number().int().min(1).max(maxImageDimension),
+      height: z.number().int().min(1).max(maxImageDimension),
+    })
+    .nullable()
+    .default(null),
   stats: z.object({
     STR: point,
     CON: point,
@@ -316,6 +326,7 @@ export function newCharacter(edition: Edition = "7"): Character {
     gender: "",
     birthplace: "",
     residence: "",
+    image: null,
     stats: { STR: 0, CON: 0, POW: 0, DEX: 0, APP: 0, SIZ: 0, INT: 0, EDU: 0 },
     luck: 0,
     pointMode: "edu",

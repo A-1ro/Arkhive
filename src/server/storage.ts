@@ -9,6 +9,8 @@ export async function saveCharacter(
   input: unknown,
 ) {
   const c = characterSchema.parse(input);
+  // Image references are managed exclusively by the image API, including for MCP saves.
+  c.image = null;
   const errors = validateAllocation(c);
   if (errors.length) throw new Error(errors.join("・"));
   c.updatedAt = new Date().toISOString();
@@ -19,21 +21,27 @@ export async function saveCharacter(
     .bind(c.id, userId, JSON.stringify(c), c.updatedAt)
     .run();
   if (!r.meta.changes) throw new Error("この探索者を編集する権限がありません");
-  return c;
+  return (await getCharacter(db, userId, c.id))!;
+}
+function readCharacter(row: { data: string; image: string | null }): Character {
+  return {
+    ...JSON.parse(row.data),
+    image: row.image ? JSON.parse(row.image) : null,
+  };
 }
 export async function listCharacters(db: D1Database, userId: string) {
   const rows = await db
     .prepare(
-      "SELECT data FROM characters WHERE user_id=? ORDER BY updated_at DESC LIMIT 200",
+      "SELECT data,image FROM characters WHERE user_id=? ORDER BY updated_at DESC LIMIT 200",
     )
     .bind(userId)
-    .all<{ data: string }>();
-  return rows.results.map((row) => JSON.parse(row.data) as Character);
+    .all<{ data: string; image: string | null }>();
+  return rows.results.map(readCharacter);
 }
 export async function getCharacter(db: D1Database, userId: string, id: string) {
   const row = await db
-    .prepare("SELECT data FROM characters WHERE id=? AND user_id=?")
+    .prepare("SELECT data,image FROM characters WHERE id=? AND user_id=?")
     .bind(id, userId)
-    .first<{ data: string }>();
-  return row ? (JSON.parse(row.data) as Character) : null;
+    .first<{ data: string; image: string | null }>();
+  return row ? readCharacter(row) : null;
 }

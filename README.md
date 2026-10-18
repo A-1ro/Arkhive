@@ -4,7 +4,7 @@
 
 - 公開サイト: https://arkhive.hiyori-schedule.com
 - GitHub: https://github.com/A-1ro/Arkhive
-- Hono / Cloudflare Workers / Cloudflare D1
+- Hono / Cloudflare Workers / Cloudflare D1 / Cloudflare R2
 - React / TypeScript / Vite
 - Discord OAuth2（identifyのみ）
 - MCP Streamable HTTP（DiscordログインによるOAuth連携）
@@ -17,6 +17,7 @@
 - 興味ポイントはINT×10（第6版）/ INT×2（第7版）。職業・興味・成長を分けて管理。
 - 日本語の基本技能を五十音順に表示、括弧内の自由入力、自由技能の追加、検索・カテゴリ表示。
 - 端末への自動保存、Discordログイン後の非公開クラウド保存、複数探索者、JSON入出力、印刷・PDF。
+- 探索者画像の登録・差し替え・削除。ブラウザーでWebPに圧縮して非公開のR2へ保存し、基本情報・サマリー・印刷プレビューに表示。
 - PC・モバイル対応。白基調の控えめなグラスUI、ロールアニメーション、全画面スケルトン、動きを減らす設定への対応。
 - キャッチコピーや紹介バナーを置かず、編集操作を中心にした構成。
 
@@ -46,6 +47,18 @@ npm test
 
 結合テストはWranglerの独立したローカルD1で実行し、本番データは変更しません。テスト対象は版別計算、ポイント制限、保存・更新、所有権、期限切れセッション、CSRF、不正入力、MCPの接続・探索者作成、OAuth認可・PKCE・認証コードの再利用防止・更新・連携解除です。
 
+## 探索者画像
+
+Discordログイン後、基本情報の「画像を登録」からJPEG・PNG・WebP（元画像20MBまで）を選択します。画像の登録時に現在の探索者もクラウドへ保存します。
+
+ブラウザーで縦横比を維持して長辺を最大1,024pxに縮小し、WebPへ再エンコードします。品質82%から調整し、必要ならさらに縮小して、保存サイズを必ず256KiB（262,144バイト）以下に抑えます。小さい画像は拡大せず、透過を保持します。元画像やEXIF情報は送信・保存しません。WebPに変換できないブラウザーではエラーを表示します。
+
+Worker側でもサイズ・WebPコンテナー・実画像の寸法を検証し、アニメーション・不正な形式・余分なメタデータを拒否します。R2にはユーザーと探索者ごとに1つだけ保存し、差し替え時は上書き、画像や探索者の削除時はR2からも削除します。D1には画像の参照情報だけを別カラムに保存し、通常保存やMCP更新から画像の紐付けを変更できないようにしています。
+
+画像の取得・更新・削除には所有者のログインが必要です。バケットの公開アクセスは有効にしないでください。JSON出力には画像本体を含まず、JSONを新しい探索者として読み込んだ場合は画像の再登録が必要です。ログアウト中やオフラインではR2の画像を表示できません。
+
+ローカル開発・テストはWranglerが模擬するR2を使用します。圧縮、画像の認証・所有権・CSRF、サイズや形式の検証、差し替え、画像・探索者の削除時の後片付けもテストします。
+
 ## 公開
 
 このプロジェクトの `wrangler.jsonc` は現在の公開WorkerとD1に接続しています。別アカウントに公開する場合は `wrangler d1 create` で自分のDBを作成し、`database_id` を変更してください。
@@ -54,6 +67,8 @@ npm test
 npm run db:remote
 npm run deploy
 ```
+
+画像機能の初回公開前に、同じCloudflareアカウントで `npx wrangler r2 bucket create arkhive-character-images` を実行して非公開バケットを作成してください。`wrangler.jsonc` の `CHARACTER_IMAGES` バインディングが接続先です。既存環境にも `npm run db:remote` で `0003_character_images.sql` を適用してから公開します。
 
 GitHub Actionsでは型検査・ビルド・テストを実行します。Cloudflareへの公開はローカルのWranglerから実行します。
 

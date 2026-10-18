@@ -190,7 +190,11 @@ beforeAll(async () => {
     remoteBindings: false,
     envFiles: [],
   });
-  for (const migration of ["0001_initial.sql", "0002_mcp_oauth.sql"]) {
+  for (const migration of [
+    "0001_initial.sql",
+    "0002_mcp_oauth.sql",
+    "0003_character_images.sql",
+  ]) {
     const sql = await readFile(
       new URL(`../migrations/${migration}`, import.meta.url),
       "utf8",
