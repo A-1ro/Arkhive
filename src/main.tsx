@@ -45,7 +45,10 @@ import {
   rollAll,
   rollStat,
   skillBase,
+  skillName,
+  skillSpecialty,
   skillTotal,
+  sortSkills,
   statKeys,
   statLabels,
   validateAllocation,
@@ -111,6 +114,30 @@ function Logo({ small = false }: { small?: boolean }) {
     </div>
   );
 }
+function SkillNameInput({
+  skill,
+  onChange,
+}: {
+  skill: Skill;
+  onChange: (name: string) => void;
+}) {
+  const parts = skillSpecialty(skill.name);
+  if (!parts) return <>{skillName(skill)}</>;
+  return (
+    <div className="specialized-skill-name">
+      <span>{parts.label}（</span>
+      <input
+        aria-label={`${parts.label}の括弧内`}
+        placeholder="自由入力"
+        maxLength={100 - parts.label.length - 2}
+        value={parts.specialty}
+        onChange={(e) => onChange(`${parts.label}（${e.target.value}）`)}
+      />
+      <span>）</span>
+    </div>
+  );
+}
+
 function App() {
   const [sheets, setSheets] = useState<Character[]>(initial);
   const [activeId, setActiveId] = useState(initial[0].id);
@@ -1031,7 +1058,7 @@ function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {c.skills
+                          {sortSkills(c.skills)
                             .filter(
                               (s) =>
                                 s.name.includes(search) &&
@@ -1079,7 +1106,12 @@ function App() {
                                     </div>
                                   ) : (
                                     <>
-                                      {s.name}
+                                      <SkillNameInput
+                                        skill={s}
+                                        onChange={(name) =>
+                                          updateSkill(s.id, { name })
+                                        }
+                                      />
                                       {s.name === "クトゥルフ神話" && (
                                         <small className="mythos-note">
                                           成長のみ
@@ -1174,7 +1206,7 @@ function App() {
                     )}
                     <div className="panel-note">
                       <BookOpen size={14} />
-                      基本ルールの技能を表示。専門分野は「自由技能」から追加できます。
+                      技能は五十音順に表示。括弧内は自由に入力できます。
                     </div>
                   </section>
                 </>
@@ -1784,9 +1816,9 @@ function App() {
                 </div>
                 <h3>技能</h3>
                 <div className="print-skills">
-                  {c.skills.map((s) => (
+                  {sortSkills(c.skills).map((s) => (
                     <div key={s.id}>
-                      <span>{s.name}</span>
+                      <span>{skillName(s)}</span>
                       <b>{skillTotal(s, c)}%</b>
                       {c.edition === "7" && (
                         <small>

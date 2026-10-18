@@ -108,7 +108,7 @@ describe("edition-specific character rules", () => {
   it("uses official edition-specific Japanese names and bases", () => {
     const six = makeSkills("6");
     const seven = makeSkills("7");
-    expect(six.find((s) => s.name === "こぶし（パンチ）")?.base).toBe(50);
+    expect(six.find((s) => s.name === "こぶし")?.base).toBe(50);
     expect(six.find((s) => s.name === "図書館")?.base).toBe(25);
     expect(seven.find((s) => s.name === "図書館")?.base).toBe(20);
     expect(seven.find((s) => s.name === "近接戦闘（格闘）")?.base).toBe(25);

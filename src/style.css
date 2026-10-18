@@ -1748,6 +1748,20 @@ h1 {
 .custom-skill-name .icon-button {
   padding: 2px;
 }
+.specialized-skill-name {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.specialized-skill-name span {
+  flex-shrink: 0;
+}
+.specialized-skill-name input {
+  flex: 1;
+  width: 100%;
+  min-width: 60px;
+  text-align: left;
+}
 .mythos-note {
   display: block;
   font-size: 6px;

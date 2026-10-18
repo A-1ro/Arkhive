@@ -98,7 +98,7 @@ const common: [string, number, string][] = [
   ["説得", 15, "交渉"],
   ["信用", 15, "交渉"],
   ["母国語", 0, "交渉"],
-  ["ほかの言語", 1, "交渉"],
+  ["ほかの言語（）", 1, "交渉"],
   ["心理学", 5, "知識"],
   ["精神分析", 1, "知識"],
   ["医学", 5, "知識"],
@@ -122,7 +122,7 @@ const common: [string, number, string][] = [
   ["ナビゲート", 10, "行動"],
 ];
 const six: [string, number, string][] = [
-  ["こぶし（パンチ）", 50, "戦闘"],
+  ["こぶし", 50, "戦闘"],
   ["キック", 25, "戦闘"],
   ["組み付き", 25, "戦闘"],
   ["頭突き", 10, "戦闘"],
@@ -136,8 +136,8 @@ const six: [string, number, string][] = [
   ["隠れる", 10, "探索"],
   ["忍び歩き", 10, "行動"],
   ["写真術", 10, "技術"],
-  ["芸術", 5, "技術"],
-  ["製作", 5, "技術"],
+  ["芸術（）", 5, "技術"],
+  ["製作（）", 5, "技術"],
   ["化学", 1, "知識"],
   ["生物学", 1, "知識"],
   ["地質学", 1, "知識"],
@@ -156,10 +156,10 @@ const seven: [string, number, string][] = [
   ["鑑定", 5, "知識"],
   ["威圧", 15, "交渉"],
   ["魅惑", 15, "交渉"],
-  ["芸術／製作", 5, "技術"],
-  ["科学", 1, "知識"],
+  ["芸術／製作（）", 5, "技術"],
+  ["科学（）", 1, "知識"],
   ["自然", 10, "知識"],
-  ["サバイバル", 10, "行動"],
+  ["サバイバル（）", 10, "行動"],
 ];
 const sevenBases: Record<string, number> = {
   聞き耳: 20,
@@ -178,18 +178,131 @@ const sevenBases: Record<string, number> = {
   コンピューター: 5,
   変装: 5,
 };
-export function makeSkills(edition: Edition): Skill[] {
-  return [...common, ...(edition === "6" ? six : seven)].map(
-    ([name, base, category], i) => ({
-      id: `skill-${edition}-${i}`,
+
+// Kanji collation does not follow pronunciation. Keep readings separate from
+// saved names so existing sheets and user-entered specialties sort identically.
+const skillReadings: Record<string, string> = {
+  威圧: "いあつ",
+  言いくるめ: "いいくるめ",
+  医学: "いがく",
+  運転: "うんてん",
+  応急手当: "おうきゅうてあて",
+  オカルト: "おかると",
+  隠密: "おんみつ",
+  回避: "かいひ",
+  化学: "かがく",
+  科学: "かがく",
+  鍵開け: "かぎあけ",
+  隠す: "かくす",
+  隠れる: "かくれる",
+  鑑定: "かんてい",
+  聞き耳: "ききみみ",
+  機械修理: "きかいしゅうり",
+  キック: "きっく",
+  近接戦闘: "きんせつせんとう",
+  クトゥルフ神話: "くとぅるふしんわ",
+  組み付き: "くみつき",
+  芸術: "げいじゅつ",
+  "芸術／製作": "げいじゅつせいさく",
+  経理: "けいり",
+  拳銃: "けんじゅう",
+  考古学: "こうこがく",
+  こぶし: "こぶし",
+  コンピューター: "こんぴゅーたー",
+  サバイバル: "さばいばる",
+  サブマシンガン: "さぶましんがん",
+  自然: "しぜん",
+  忍び歩き: "しのびあるき",
+  写真術: "しゃしんじゅつ",
+  射撃: "しゃげき",
+  重機械操作: "じゅうきかいそうさ",
+  ショットガン: "しょっとがん",
+  乗馬: "じょうば",
+  信用: "しんよう",
+  心理学: "しんりがく",
+  人類学: "じんるいがく",
+  水泳: "すいえい",
+  頭突き: "ずつき",
+  製作: "せいさく",
+  精神分析: "せいしんぶんせき",
+  生物学: "せいぶつがく",
+  説得: "せっとく",
+  操縦: "そうじゅう",
+  地質学: "ちしつがく",
+  跳躍: "ちょうやく",
+  追跡: "ついせき",
+  手さばき: "てさばき",
+  電気修理: "でんきしゅうり",
+  電子工学: "でんしこうがく",
+  天文学: "てんもんがく",
+  投擲: "とうてき",
+  登攀: "とうはん",
+  図書館: "としょかん",
+  ナビゲート: "なびげーと",
+  値切り: "ねぎり",
+  博物学: "はくぶつがく",
+  物理学: "ぶつりがく",
+  変装: "へんそう",
+  法律: "ほうりつ",
+  ほかの言語: "ほかのげんご",
+  母国語: "ぼこくご",
+  マーシャルアーツ: "まーしゃるあーつ",
+  マシンガン: "ましんがん",
+  魅惑: "みわく",
+  目星: "めぼし",
+  薬学: "やくがく",
+  ライフル: "らいふる",
+  歴史: "れきし",
+};
+const skillCollator = new Intl.Collator("ja");
+
+export function skillSpecialty(name: string) {
+  const match = name.match(/^(.+?)[（(](.*)[）)]$/);
+  if (match)
+    return match[1] === "こぶし"
+      ? null
+      : { label: match[1], specialty: match[2] };
+  // Sheets saved before specialties were editable use these bare names.
+  if (
+    ["芸術", "製作", "芸術／製作", "科学", "ほかの言語", "サバイバル"].includes(
       name,
-      base: edition === "7" ? (sevenBases[name] ?? base) : base,
-      category,
-      occupation: 0,
-      interest: 0,
-      growth: 0,
-      custom: false,
-    }),
+    )
+  )
+    return { label: name, specialty: "" };
+  return null;
+}
+
+export function skillName(s: Skill) {
+  // The old sixth-edition label was an alias, not an editable specialty.
+  if (!s.custom && /^こぶし[（(].*[）)]$/.test(s.name)) return "こぶし";
+  const parts = skillSpecialty(s.name);
+  return parts ? `${parts.label}（${parts.specialty}）` : s.name;
+}
+
+export function sortSkills(skills: readonly Skill[]): Skill[] {
+  const reading = (s: Skill) => {
+    const label = skillSpecialty(s.name)?.label ?? skillName(s);
+    return skillReadings[label] ?? label;
+  };
+  return [...skills].sort((a, b) =>
+    skillCollator.compare(reading(a), reading(b)),
+  );
+}
+
+export function makeSkills(edition: Edition): Skill[] {
+  return sortSkills(
+    [...common, ...(edition === "6" ? six : seven)].map(
+      ([name, base, category], i) => ({
+        id: `skill-${edition}-${i}`,
+        name,
+        base: edition === "7" ? (sevenBases[name] ?? base) : base,
+        category,
+        occupation: 0,
+        interest: 0,
+        growth: 0,
+        custom: false,
+      }),
+    ),
   );
 }
 export function newCharacter(edition: Edition = "7"): Character {
