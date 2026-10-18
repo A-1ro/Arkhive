@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import {
   derived,
+  skillBase,
   skillName,
   skillTotal,
   sortSkills,
@@ -37,7 +38,7 @@ export function PublicSheet({
   portraitUrl: string | null;
   canEdit: boolean;
 }) {
-  const [allocatedOnly, setAllocatedOnly] = useState(false);
+  const [allocatedOnly, setAllocatedOnly] = useState(true);
   const d = derived(c);
   const skills = sortSkills(c.skills).filter(
     (s) => !allocatedOnly || s.occupation + s.interest + s.growth > 0,
@@ -194,7 +195,7 @@ export function PublicSheet({
           </div>
         </div>
         <div className="public-skills-caption">
-          <p>職業・興味・成長ポイントを含む技能値</p>
+          <p>技能値と、初期値・職業・興味・成長ポイントの内訳</p>
           <span role="status">
             {skills.length} / {c.skills.length} 技能
           </span>
@@ -235,6 +236,22 @@ export function PublicSheet({
                             aria-label="ポイント割り振り済み"
                           />
                         )}
+                        <dl
+                          className="public-skill-breakdown"
+                          aria-label={`${skillName(s)}の技能値の内訳`}
+                        >
+                          {[
+                            ["初期値", skillBase(s, c)],
+                            ["職業", s.occupation],
+                            ["興味", s.interest],
+                            ["成長", s.growth],
+                          ].map(([label, value]) => (
+                            <div key={label}>
+                              <dt>{label}</dt>
+                              <dd>{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
                       </th>
                       <td>
                         <strong>

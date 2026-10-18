@@ -2566,6 +2566,26 @@ h1 {
   background: var(--gold);
   margin: 0 0 2px 8px;
 }
+.public-skill-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  font-size: 11px;
+}
+.public-skill-breakdown > div {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.public-skill-breakdown dt {
+  color: var(--muted);
+}
+.public-skill-breakdown dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
 .public-skills-empty {
   text-align: center;
   padding: 32px 12px;
