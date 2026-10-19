@@ -14,6 +14,7 @@ import {
   CircleHelp,
   Cloud,
   Code2,
+  Copy,
   Dices,
   Download,
   Ellipsis,
@@ -64,6 +65,7 @@ import "./style.css";
 import { compressImage } from "./client/compress-image";
 import { NumberInput } from "./client/NumberInput";
 import { PublicSheet } from "./client/PublicSheet";
+import { toCcfoliaCharacter } from "./shared/ccfolia";
 import { imageUrl } from "./shared/images";
 import {
   legacyImportKey,
@@ -73,7 +75,15 @@ import {
 
 type User = { id: string; name: string; avatar: string | null };
 type Modal =
-  "new" | "mcp" | "help" | "preview" | "sharing" | "delete" | "edition" | null;
+  | "new"
+  | "mcp"
+  | "help"
+  | "preview"
+  | "sharing"
+  | "delete"
+  | "edition"
+  | "ccfolia"
+  | null;
 type Toast = { text: string; kind?: "error" | "ok" };
 const localKey = "mythos-notebook-v1";
 function readLocal(): Character[] {
@@ -317,6 +327,9 @@ function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [menu, setMenu] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [copyingCcfolia, setCopyingCcfolia] = useState(false);
+  const [ccfoliaJSON, setCcfoliaJSON] = useState("");
+  const ccfoliaCopy = useRef<symbol | null>(null);
   const [sharing, setSharing] = useState<{
     id: string;
     shareId: string | null;
@@ -698,6 +711,38 @@ function App() {
       notify((e as Error).message, "error");
     } finally {
       setImageBusy(null);
+    }
+  }
+  // Ignore late clipboard results after navigating to another sheet or dialog.
+  useEffect(() => {
+    ccfoliaCopy.current = null;
+    setCopyingCcfolia(false);
+  }, [activeId, view, modal]);
+  async function exportCcfolia() {
+    if (ccfoliaCopy.current) return;
+    const request = Symbol();
+    ccfoliaCopy.current = request;
+    const json = JSON.stringify(toCcfoliaCharacter(c));
+    const trigger = document.activeElement as HTMLElement | null;
+    setCopyingCcfolia(true);
+    try {
+      // Invoke while the click still has browser user activation. No save or fetch.
+      await navigator.clipboard.writeText(json);
+      if (ccfoliaCopy.current === request)
+        notify(
+          "CCFOLIA用のコマをコピーしました。ルームの盤面に貼り付けてください",
+        );
+    } catch {
+      if (ccfoliaCopy.current === request) {
+        setCcfoliaJSON(json);
+        if (modal === null) modalTrigger.current = trigger;
+        setModal("ccfolia");
+      }
+    } finally {
+      if (ccfoliaCopy.current === request) {
+        ccfoliaCopy.current = null;
+        setCopyingCcfolia(false);
+      }
     }
   }
   function exportJSON() {
@@ -1234,6 +1279,16 @@ function App() {
                   </div>
                 </div>
                 <div className="editor-actions">
+                  <button
+                    className="button button-white"
+                    onClick={() => void exportCcfolia()}
+                    disabled={copyingCcfolia}
+                    aria-busy={copyingCcfolia}
+                    title="現在の入力内容をコピーします。画像・メモ・プロフィールは含みません"
+                  >
+                    <Copy size={16} />
+                    <span>CCFOLIAコマ出力</span>
+                  </button>
                   <button
                     className="button button-white"
                     onClick={() => openModal("sharing")}
@@ -2236,25 +2291,49 @@ function App() {
       )}
       {modal && (
         <ModalFrame
+          key={modal}
           title={
-            modal === "new"
-              ? "新しい探索者をつくる"
-              : modal === "sharing"
-                ? "キャラクターシートの公開設定"
-                : modal === "mcp"
-                  ? "MCP連携"
-                  : modal === "preview"
-                    ? "探索者シート"
-                    : modal === "delete"
-                      ? "探索者を削除"
-                      : modal === "edition"
-                        ? "ルールの版を切り替える"
-                        : "使い方・サイトについて"
+            modal === "ccfolia"
+              ? "CCFOLIAコマ出力"
+              : modal === "new"
+                ? "新しい探索者をつくる"
+                : modal === "sharing"
+                  ? "キャラクターシートの公開設定"
+                  : modal === "mcp"
+                    ? "MCP連携"
+                    : modal === "preview"
+                      ? "探索者シート"
+                      : modal === "delete"
+                        ? "探索者を削除"
+                        : modal === "edition"
+                          ? "ルールの版を切り替える"
+                          : "使い方・サイトについて"
           }
           onClose={() => setModal(null)}
           wide={modal === "preview"}
           returnFocus={modalTrigger.current}
         >
+          {modal === "ccfolia" && (
+            <>
+              <p className="modal-description" role="status">
+                自動コピーできませんでした。下のJSONを選択してコピーし、ココフォリアのルームの盤面に貼り付けてください。
+              </p>
+              <label className="ccfolia-json-label">
+                コマのJSON
+                <textarea
+                  className="ccfolia-json"
+                  readOnly
+                  rows={10}
+                  value={ccfoliaJSON}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onClick={(e) => e.currentTarget.select()}
+                />
+              </label>
+              <p className="modal-description">
+                出力ボタンを押した時点の内容です。画像・メモ・プロフィールは含みません。
+              </p>
+            </>
+          )}
           {modal === "sharing" && (
             <>
               <p className="modal-description">
@@ -2610,6 +2689,15 @@ function App() {
           {modal === "preview" && (
             <>
               <div className="preview-actions">
+                <button
+                  className="button button-white"
+                  onClick={() => void exportCcfolia()}
+                  disabled={copyingCcfolia}
+                  aria-busy={copyingCcfolia}
+                >
+                  <Copy size={15} />
+                  CCFOLIAコマ出力
+                </button>
                 <button className="button button-white" onClick={exportJSON}>
                   <Download size={15} />
                   JSON出力
