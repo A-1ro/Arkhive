@@ -1277,51 +1277,63 @@ function App() {
                     <h2>{c.name || "新しい探索者"}</h2>
                     <span>{c.name ? "編集中" : "下書き"}</span>
                   </div>
-                </div>
-                <div className="editor-actions">
-                  <button
-                    className="button button-white"
-                    onClick={() => void exportCcfolia()}
-                    disabled={copyingCcfolia}
-                    aria-busy={copyingCcfolia}
-                    title="現在の入力内容をコピーします。画像・メモ・プロフィールは含みません"
-                  >
-                    <Copy size={16} />
-                    <span>CCFOLIAコマ出力</span>
-                  </button>
-                  <button
-                    className="button button-white"
-                    onClick={() => openModal("sharing")}
-                    disabled={saving || !!imageBusy}
-                  >
-                    <Link2 size={16} />
-                    <span>公開設定</span>
-                  </button>
                   <button
                     className="edition-switch"
                     onClick={() => openModal("edition")}
                   >
                     第{c.edition}版 <ChevronDown size={13} />
                   </button>
-                  <button
-                    className="button button-white preview-btn"
-                    onClick={() => openModal("preview")}
+                </div>
+                <div className="editor-actions">
+                  <div
+                    className="editor-action-group editor-primary-actions"
+                    role="group"
+                    aria-label="保存とプレビュー"
                   >
-                    <Eye size={16} />
-                    <span>プレビュー</span>
-                  </button>
-                  <button
-                    className="button button-primary"
-                    onClick={() => void save()}
-                    disabled={saving || !!imageBusy}
+                    <button
+                      className="button button-white preview-btn"
+                      onClick={() => openModal("preview")}
+                    >
+                      <Eye size={16} />
+                      <span>プレビュー</span>
+                    </button>
+                    <button
+                      className="button button-primary"
+                      onClick={() => void save()}
+                      disabled={saving || !!imageBusy}
+                    >
+                      {saving ? (
+                        <LoaderCircle className="spin" size={16} />
+                      ) : (
+                        <Cloud size={16} />
+                      )}
+                      <span>{saving ? "保存中" : "クラウドに保存"}</span>
+                    </button>
+                  </div>
+                  <div
+                    className="editor-action-group editor-secondary-actions"
+                    role="group"
+                    aria-label="出力と公開"
                   >
-                    {saving ? (
-                      <LoaderCircle className="spin" size={16} />
-                    ) : (
-                      <Cloud size={16} />
-                    )}
-                    <span>{saving ? "保存中" : "クラウドに保存"}</span>
-                  </button>
+                    <button
+                      className="button button-white"
+                      onClick={() => void exportCcfolia()}
+                      disabled={copyingCcfolia}
+                      aria-busy={copyingCcfolia}
+                      title="現在の入力内容をコピーします。画像・メモ・プロフィールは含みません"
+                    >
+                      <Copy size={16} />
+                      <span>CCFOLIAコマ出力</span>
+                    </button>
+                    <button
+                      className="button button-white"
+                      onClick={() => openModal("sharing")}
+                      disabled={saving || !!imageBusy}
+                    >
+                      <Link2 size={16} />
+                      <span>公開設定</span>
+                    </button>
+                  </div>
                 </div>
               </div>
               <nav className="tabs" role="tablist" aria-label="編集する項目">
@@ -2690,7 +2702,7 @@ function App() {
             <>
               <div className="preview-actions">
                 <button
-                  className="button button-white"
+                  className="button button-white preview-ccfolia"
                   onClick={() => void exportCcfolia()}
                   disabled={copyingCcfolia}
                   aria-busy={copyingCcfolia}
