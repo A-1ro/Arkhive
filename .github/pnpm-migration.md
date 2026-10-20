@@ -3,7 +3,7 @@
 ## 固定バージョンと保護範囲
 
 `packageManager: pnpm@10.34.7` を開発、GitHub Actions、Workers Builds で共通にします。
-2026-10-21 の npm 配布タグ `latest-10` と [公式リリース](https://github.com/pnpm/pnpm/releases/tag/v10.34.7)を確認しました。
+2026-10-20 UTC の npm 配布タグ `latest-10` と [公式リリース](https://github.com/pnpm/pnpm/releases/tag/v10.34.7)を確認しました。
 最新メジャーの 12 系ではなく、[Dependabot の公式対応範囲](https://docs.github.com/en/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories)にある 10 系の安定版を選びました。
 Dependabot の `package-ecosystem: npm` は pnpm でも正しいため維持します。
 `packageManagerStrictVersion: true` と `managePackageManagerVersions: false` で、古い pnpm の実行や暗黙の切替を避けます。pnpm を更新するときはこの設定、CI、以下の Builds 設定を一緒に見直します。
@@ -51,6 +51,18 @@ pnpm audit --audit-level=low
 GitHub Actions のキャッシュは `pnpm-lock.yaml` をキーにした pnpm store のみです。インストールを省略しません。
 監査ジョブはインストールせずに lockfile 全体（開発・任意依存を含む）を監査し、low 以上と監査未完了を失敗にします。
 CodeQL の対象言語・security-extended・アップロード権限は維持しています。
+
+## ローカル検証結果
+
+機能追加 PR #8 を含む main `ea37c66` を基に、macOS arm64 / Node.js 22.22.2 / pnpm 10.34.7 で確認しました。
+
+- 新しい作業ツリーでスクリプトを無効にして依存を取得・点検後、`node_modules` を削除し、frozen lockfile でクリーンインストール成功。実行された postinstall は esbuild と workerd のみ。
+- `pnpm run check:native`、型検査、Vite ビルド成功。全9ファイル・131テスト成功。結合テストは一時的なローカル D1/R2 のみを使用。
+- `pnpm audit --audit-level=low --json --registry=https://registry.npmjs.org` は終了コード0、info/low/moderate/high/critical すべて0。
+- 変更ファイルの Prettier チェック成功。
+- リポジトリ外のローカル検証用パッケージで、未知の postinstall が実行されず `ERR_PNPM_IGNORED_BUILDS` になることを確認。
+- 同じ検証用プロジェクトで manifest と lockfile を不整合にし、`ERR_PNPM_OUTDATED_LOCKFILE` で停止することを確認。
+- 手元の別版 pnpm 10.33.2 をこのプロジェクトで実行し、10.34.7 が必要とのエラーで停止することを確認。
 
 ## Cloudflare Workers Builds の切替（未実施）
 
