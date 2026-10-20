@@ -27,10 +27,10 @@ export function readCharacter(row: {
   data: string;
   image: string | null;
 }): Character {
-  return {
+  return characterSchema.parse({
     ...JSON.parse(row.data),
     image: row.image ? JSON.parse(row.image) : null,
-  };
+  });
 }
 export async function listCharacters(db: D1Database, userId: string) {
   const rows = await db

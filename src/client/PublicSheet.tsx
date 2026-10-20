@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import {
   derived,
+  hasSkillInvestment,
+  isKeyConnection,
+  statTotal,
   skillBase,
   skillName,
   skillTotal,
@@ -18,6 +21,8 @@ import {
   type Character,
 } from "../shared/rules";
 
+import { EquipmentDetails, LostBadge } from "./SheetExtras";
+
 const noteFields = [
   ["appearance", "容姿の描写"],
   ["belief", "イデオロギー／信念"],
@@ -25,7 +30,6 @@ const noteFields = [
   ["meaningfulPlaces", "意味のある場所"],
   ["treasuredPossessions", "秘蔵の品"],
   ["traits", "特徴"],
-  ["equipment", "装備と所持品"],
   ["notes", "セッションメモ"],
 ] as const;
 
@@ -41,7 +45,7 @@ export function PublicSheet({
   const [allocatedOnly, setAllocatedOnly] = useState(true);
   const d = derived(c);
   const skills = sortSkills(c.skills).filter(
-    (s) => !allocatedOnly || s.occupation + s.interest + s.growth > 0,
+    (s) => !allocatedOnly || hasSkillInvestment(s),
   );
   const vitals = [
     { label: "HP", value: c.currentHP ?? d.hp, max: d.hp, icon: Heart },
@@ -57,6 +61,7 @@ export function PublicSheet({
       >
         <div className="public-profile-heading">
           <span className="edition-badge">第{c.edition}版</span>
+          <LostBadge lost={c.lost} />
           <span className="public-caption">クトゥルフ神話TRPG</span>
           {canEdit && (
             <a className="button button-white" href={`/?character=${c.id}`}>
@@ -119,11 +124,14 @@ export function PublicSheet({
                 <span>{statLabels[key]}</span>
               </dt>
               <dd>
-                <strong>{c.stats[key]}</strong>
+                <strong>{statTotal(c, key)}</strong>
+                <small>
+                  基本 {c.stats[key]} / 補正 {c.statModifiers[key] ?? "未指定"}
+                </small>
                 {c.edition === "7" && (
                   <small>
-                    {Math.floor(c.stats[key] / 2)} /{" "}
-                    {Math.floor(c.stats[key] / 5)}
+                    {Math.floor(statTotal(c, key) / 2)} /{" "}
+                    {Math.floor(statTotal(c, key) / 5)}
                   </small>
                 )}
               </dd>
@@ -190,12 +198,12 @@ export function PublicSheet({
               aria-pressed={allocatedOnly}
               onClick={() => setAllocatedOnly(true)}
             >
-              ポイント割り振り済み
+              割り振り・補正あり
             </button>
           </div>
         </div>
         <div className="public-skills-caption">
-          <p>技能値と、初期値・職業・興味・成長ポイントの内訳</p>
+          <p>技能値と、初期値・職業・興味・成長・補正の内訳</p>
           <span role="status">
             {skills.length} / {c.skills.length} 技能
           </span>
@@ -205,7 +213,7 @@ export function PublicSheet({
             <table className="public-skills-table">
               <caption className="sr-only">
                 探索者の技能値
-                {allocatedOnly ? "（ポイント割り振り済みのみ）" : "（すべて）"}
+                {allocatedOnly ? "（割り振り・補正ありのみ）" : "（すべて）"}
               </caption>
               <thead>
                 <tr>
@@ -230,10 +238,10 @@ export function PublicSheet({
                     <tr key={s.id}>
                       <th scope="row">
                         {skillName(s)}
-                        {s.occupation + s.interest + s.growth > 0 && (
+                        {hasSkillInvestment(s) && (
                           <span
                             className="public-trained-mark"
-                            aria-label="ポイント割り振り済み"
+                            aria-label="割り振り・補正あり"
                           />
                         )}
                         <dl
@@ -245,6 +253,7 @@ export function PublicSheet({
                             ["職業", s.occupation],
                             ["興味", s.interest],
                             ["成長", s.growth],
+                            ["補正", s.modifier ?? "未指定"],
                           ].map(([label, value]) => (
                             <div key={label}>
                               <dt>{label}</dt>
@@ -273,22 +282,30 @@ export function PublicSheet({
           </div>
         ) : (
           <p className="public-skills-empty">
-            ポイントを割り振った技能はまだありません。
+            割り振り・補正のある技能はまだありません。
           </p>
         )}
       </section>
 
+      {(c.inventory.length > 0 || c.weapons.length > 0) && (
+        <div className="public-card glass">
+          <EquipmentDetails c={c} />
+        </div>
+      )}
       <div className="public-notes-grid">
         {noteFields
-          .filter(([key]) => c[key])
+          .filter(([key]) => c[key] || isKeyConnection(c, key))
           .map(([key, label]) => (
             <section
-              className={`public-card glass ${key === "equipment" || key === "notes" ? "public-note-wide" : ""}`}
+              className={`public-card glass ${key === "notes" ? "public-note-wide" : ""}`}
               key={key}
               aria-labelledby={`public-${key}-title`}
             >
               <div className="public-section-heading">
-                <h2 id={`public-${key}-title`}>{label}</h2>
+                <h2 id={`public-${key}-title`}>
+                  {label}
+                  {isKeyConnection(c, key) && " ★ キーコネクション"}
+                </h2>
               </div>
               <p className="public-note-text">{c[key]}</p>
             </section>
