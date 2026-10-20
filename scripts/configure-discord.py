@@ -25,7 +25,7 @@ def main():
         sys.exit("Client Secretが短すぎます。OAuth2のClient Secretを確認してください。")
     payload = json.dumps({"DISCORD_CLIENT_ID": client_id, "DISCORD_CLIENT_SECRET": secret,
                           "DISCORD_REDIRECT_URI": CALLBACK})
-    subprocess.run(["npx", "wrangler", "secret", "bulk"], input=payload, text=True, check=True)
+    subprocess.run(["pnpm", "exec", "wrangler", "secret", "bulk"], input=payload, text=True, check=True)
     print("設定しました。公開サイトを再読み込みしてDiscordログインを確認してください。")
 
 if __name__ == "__main__":
