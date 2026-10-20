@@ -4,6 +4,7 @@ import {
   skillTotal,
   sortSkills,
   statKeys,
+  statTotal,
   type Character,
 } from "./rules";
 
@@ -28,7 +29,7 @@ export function toCcfoliaCharacter(c: Character): CcfoliaCharacter {
   const roll = c.edition === "6" ? "CCB" : "CC";
   const params: CcfoliaCharacter["data"]["params"] = statKeys.map((key) => ({
     label: key,
-    value: String(c.stats[key]),
+    value: String(statTotal(c, key)),
   }));
   params.push(
     { label: "幸運", value: String(d.luck) },
@@ -44,7 +45,7 @@ export function toCcfoliaCharacter(c: Character): CcfoliaCharacter {
     kind: "character",
     data: {
       name: c.name || "名前のない探索者",
-      initiative: c.stats.DEX,
+      initiative: statTotal(c, "DEX"),
       status: [
         { label: "HP", value: c.currentHP ?? d.hp, max: d.hp },
         { label: "MP", value: c.currentMP ?? d.mp, max: d.mp },
@@ -58,7 +59,7 @@ export function toCcfoliaCharacter(c: Character): CcfoliaCharacter {
         `${roll}<=${d.knowledge} 知識`,
         ...statKeys.map(
           (key) =>
-            `${roll}<=${c.stats[key] * (c.edition === "6" ? 5 : 1)} ${key}${c.edition === "6" ? "×5" : ""}`,
+            `${roll}<=${statTotal(c, key) * (c.edition === "6" ? 5 : 1)} ${key}${c.edition === "6" ? "×5" : ""}`,
         ),
         ...sortSkills(c.skills).map(
           (skill) =>

@@ -10,6 +10,9 @@ describe("manual numeric input", () => {
     ["０", 0],
     ["０６５", 65],
     ["－１", -1],
+    ["+12", 12],
+    ["＋１２", 12],
+    ["−12", -12],
   ])("reads %s without losing the entered number", (text, value) => {
     expect(parseNumericInput(text)).toBe(value);
   });

@@ -24,6 +24,50 @@ export const statLabels: Record<StatKey, string> = {
   EDU: "教育",
 };
 const point = z.number().int().min(0).max(999);
+const modifier = z.number().int().min(-999).max(999).nullable().default(null);
+export const backgroundFields = [
+  ["appearance", "容姿の描写"],
+  ["belief", "イデオロギー／信念"],
+  ["importantPeople", "重要な人々"],
+  ["meaningfulPlaces", "意味のある場所"],
+  ["treasuredPossessions", "秘蔵の品"],
+  ["traits", "特徴"],
+] as const;
+export const backgroundKeys = backgroundFields.map(([key]) => key);
+export const inventoryItemSchema = z.object({
+  name: z.string().max(100),
+  quantity: point.nullable().default(null),
+  notes: z.string().max(1000),
+});
+// Rules use expressions such as "1(3)", "2/連射" and "6+1". Preserve them verbatim.
+export const weaponFields = [
+  ["name", "名前"],
+  ["skill", "使用技能"],
+  ["damage", "ダメージ"],
+  ["range", "射程"],
+  ["attacks", "攻撃回数"],
+  ["ammo", "装弾数"],
+  ["malfunction", "故障No."],
+  ["durability", "耐久力"],
+  ["notes", "備考"],
+] as const;
+export const weaponSchema = z.object({
+  name: z.string().max(100),
+  skill: z.string().max(100).default(""),
+  damage: z.string().max(100).default(""),
+  range: z.string().max(100).default(""),
+  attacks: z.string().max(100).default(""),
+  ammo: z.string().max(100).default(""),
+  malfunction: z.string().max(100).default(""),
+  durability: z.string().max(100).default(""),
+  notes: z.string().max(1000).default(""),
+});
+const statModifiersSchema = z.object(
+  Object.fromEntries(statKeys.map((key) => [key, modifier])) as Record<
+    StatKey,
+    typeof modifier
+  >,
+);
 export const skillSchema = z.object({
   id: z.string().max(100),
   name: z.string().min(1).max(100),
@@ -31,6 +75,7 @@ export const skillSchema = z.object({
   occupation: point,
   interest: point,
   growth: point,
+  modifier,
   custom: z.boolean().default(false),
   category: z.string().max(30),
 });
@@ -63,6 +108,16 @@ export const characterSchema = z.object({
     INT: point,
     EDU: point,
   }),
+  statModifiers: statModifiersSchema.default(
+    () =>
+      Object.fromEntries(statKeys.map((key) => [key, null])) as Record<
+        StatKey,
+        null
+      >,
+  ),
+  lost: z.boolean().default(false),
+  // Kept when changing editions, but only active and displayed in seventh edition.
+  keyConnection: z.enum(backgroundKeys).nullable().default(null),
   luck: point,
   pointMode: z.enum(["edu", "combination", "manual"]),
   terms: z
@@ -77,7 +132,8 @@ export const characterSchema = z.object({
   pointNote: z.string().max(1000),
   skills: z.array(skillSchema).max(180),
   notes: z.string().max(20000),
-  equipment: z.string().max(10000),
+  inventory: z.array(inventoryItemSchema).max(180).default([]),
+  weapons: z.array(weaponSchema).max(100).default([]),
   appearance: z.string().max(4000),
   belief: z.string().max(4000),
   importantPeople: z.string().max(4000),
@@ -310,6 +366,7 @@ export function makeSkills(edition: Edition): Skill[] {
         occupation: 0,
         interest: 0,
         growth: 0,
+        modifier: null,
         custom: false,
       }),
     ),
@@ -328,6 +385,9 @@ export function newCharacter(edition: Edition = "7"): Character {
     residence: "",
     image: null,
     stats: { STR: 0, CON: 0, POW: 0, DEX: 0, APP: 0, SIZ: 0, INT: 0, EDU: 0 },
+    statModifiers: statModifiersSchema.parse({}),
+    lost: false,
+    keyConnection: null,
     luck: 0,
     pointMode: "edu",
     terms: [
@@ -338,7 +398,8 @@ export function newCharacter(edition: Edition = "7"): Character {
     pointNote: "",
     skills: makeSkills(edition),
     notes: "",
-    equipment: "",
+    inventory: [],
+    weapons: [],
     appearance: "",
     belief: "",
     importantPeople: "",
@@ -387,25 +448,40 @@ export function occupationPoints(c: Character) {
   if (c.pointMode === "manual") return c.manualPoints;
   if (c.pointMode === "combination")
     return Math.floor(
-      c.terms.reduce((n, t) => n + c.stats[t.stat] * t.multiplier, 0),
+      c.terms.reduce((n, t) => n + statTotal(c, t.stat) * t.multiplier, 0),
     );
-  return c.stats.EDU * (c.edition === "7" ? 4 : 20);
+  return statTotal(c, "EDU") * (c.edition === "7" ? 4 : 20);
 }
 export function interestPoints(c: Character) {
-  return c.stats.INT * (c.edition === "7" ? 2 : 10);
+  return statTotal(c, "INT") * (c.edition === "7" ? 2 : 10);
+}
+export function statTotal(c: Character, key: StatKey) {
+  return c.stats[key] + (c.statModifiers[key] ?? 0);
+}
+export function hasSkillInvestment(s: Skill) {
+  return s.occupation + s.interest + s.growth > 0 || (s.modifier ?? 0) !== 0;
+}
+export function isKeyConnection(c: Character, key: string) {
+  return c.edition === "7" && c.keyConnection === key;
 }
 export function skillBase(s: Skill, c: Character) {
   if (!s.custom && s.name === "回避")
-    return c.edition === "7" ? Math.floor(c.stats.DEX / 2) : c.stats.DEX * 2;
+    return c.edition === "7"
+      ? Math.floor(statTotal(c, "DEX") / 2)
+      : statTotal(c, "DEX") * 2;
   if (!s.custom && s.name === "母国語")
-    return Math.min(99, c.stats.EDU * (c.edition === "7" ? 1 : 5));
+    return Math.min(99, statTotal(c, "EDU") * (c.edition === "7" ? 1 : 5));
   return s.base;
 }
 export function skillTotal(s: Skill, c: Character) {
-  return skillBase(s, c) + s.occupation + s.interest + s.growth;
+  return (
+    skillBase(s, c) + s.occupation + s.interest + s.growth + (s.modifier ?? 0)
+  );
 }
 export function derived(c: Character) {
-  const s = c.stats;
+  const s = Object.fromEntries(
+    statKeys.map((key) => [key, statTotal(c, key)]),
+  ) as Record<StatKey, number>;
   const seven = c.edition === "7";
   const sum = (s.STR + s.SIZ) * (seven ? 1 : 5);
   let db = "0",
@@ -471,6 +547,10 @@ export function validateAllocation(c: Character): string[] {
     errors.push("興味ポイントが上限を超えています");
   if (c.skills.some((s) => skillTotal(s, c) > 99))
     errors.push("技能値が99を超えています");
+  if (statKeys.some((key) => statTotal(c, key) < 0))
+    errors.push("補正後の能力値が0未満です");
+  if (c.skills.some((s) => skillTotal(s, c) < 0))
+    errors.push("補正後の技能値が0未満です");
   if (
     c.skills.some(
       (s) => s.name === "クトゥルフ神話" && s.occupation + s.interest > 0,

@@ -88,6 +88,7 @@ describe("CCFOLIA clipboard character", () => {
         occupation: 11,
         interest: 13,
         growth: 17,
+        modifier: null,
         category: "自由",
         custom: true,
       });
@@ -105,7 +106,6 @@ describe("CCFOLIA clipboard character", () => {
     const c = fixture("7");
     c.notes =
       c.player =
-      c.equipment =
       c.pointNote =
       c.appearance =
       c.belief =
@@ -114,6 +114,7 @@ describe("CCFOLIA clipboard character", () => {
       c.treasuredPossessions =
       c.traits =
         "PRIVATE";
+    c.inventory = [{ name: "PRIVATE", quantity: null, notes: "PRIVATE" }];
     c.image = {
       version: crypto.randomUUID(),
       size: 100,

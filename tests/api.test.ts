@@ -437,6 +437,177 @@ describe("private R2 character images", () => {
   });
 });
 describe("D1 persistence and access control", () => {
+  it("normalizes historical D1 JSON for private, list and public reads without rewriting the row", async () => {
+    const { statModifiers, inventory, weapons, keyConnection, lost, ...old } =
+      newCharacter("7");
+    const legacy = {
+      ...old,
+      equipment: "古い装備\n縄、弾薬 6発\n  備考",
+      skills: old.skills.map(({ modifier, ...skill }) => skill),
+    };
+    const raw = JSON.stringify(legacy);
+    const shareId = crypto.randomUUID();
+    await proxy.env.DB.prepare(
+      "INSERT INTO characters(id,user_id,data,updated_at,share_id) VALUES (?,?,?,?,?)",
+    )
+      .bind(old.id, "first", raw, old.updatedAt, shareId)
+      .run();
+    const expected = {
+      id: old.id,
+      inventory: [],
+      weapons: [],
+      keyConnection: null,
+      lost: false,
+      statModifiers: { STR: null },
+    };
+    expect(
+      await (await request(`/api/characters/${old.id}`)).json(),
+    ).toMatchObject(expected);
+    expect(await (await request("/api/characters")).json()).toContainEqual(
+      expect.objectContaining({ id: old.id, lost: false, inventory: [] }),
+    );
+    expect(
+      await (
+        await request(`/api/public/characters/${shareId}`, "GET", undefined, "")
+      ).json(),
+    ).toMatchObject({ character: expected });
+    expect(
+      await proxy.env.DB.prepare("SELECT data FROM characters WHERE id=?")
+        .bind(old.id)
+        .first("data"),
+    ).toBe(raw);
+    const loaded = await (await request(`/api/characters/${old.id}`)).json();
+    expect(
+      (await request(`/api/characters/${old.id}`, "PUT", loaded)).status,
+    ).toBe(200);
+    expect(
+      await (await request(`/api/characters/${old.id}`)).json(),
+    ).toMatchObject(expected);
+    expect(
+      await proxy.env.DB.prepare("SELECT data FROM characters WHERE id=?")
+        .bind(old.id)
+        .first("data"),
+    ).not.toContain("equipment");
+    await request(`/api/characters/${old.id}`, "DELETE");
+  });
+
+  it("round trips new fields through REST, public reads and MCP, and restores a lost investigator", async () => {
+    const c = newCharacter("7");
+    c.stats.DEX = 60;
+    c.statModifiers.DEX = -5;
+    c.statModifiers.STR = 0;
+    c.skills.find((s) => s.name === "目星")!.modifier = -5;
+    c.inventory = [
+      { name: "鍵", quantity: 0, notes: "借り物" },
+      { name: "紙", quantity: null, notes: "枚数不明" },
+    ];
+    c.weapons = [
+      {
+        name: "拳銃",
+        skill: "射撃（拳銃）",
+        damage: "1D10",
+        range: "15m",
+        attacks: "1(3)",
+        ammo: "6+1",
+        malfunction: "00",
+        durability: "8",
+        notes: "特殊弾",
+      },
+    ];
+    c.keyConnection = "importantPeople";
+    c.importantPeople = "家族";
+    c.lost = true;
+    const expected = {
+      statModifiers: c.statModifiers,
+      inventory: c.inventory,
+      weapons: c.weapons,
+      keyConnection: c.keyConnection,
+      importantPeople: c.importantPeople,
+      lost: true,
+    };
+    const saved = await request(`/api/characters/${c.id}`, "PUT", c);
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject(expected);
+    expect(await (await request("/api/characters")).json()).toContainEqual(
+      expect.objectContaining({ ...expected, id: c.id }),
+    );
+    const { shareId } = (await (
+      await request(`/api/characters/${c.id}/sharing`, "PUT", { enabled: true })
+    ).json()) as { shareId: string };
+    expect(
+      await (
+        await request(`/api/public/characters/${shareId}`, "GET", undefined, "")
+      ).json(),
+    ).toMatchObject({ character: expected });
+    const rpc = async (name: string, args: unknown) => {
+      const response = await request(
+        "/mcp",
+        "POST",
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name, arguments: args },
+        },
+        "",
+        {
+          Authorization: `Bearer ${bearer}`,
+          Accept: "application/json, text/event-stream",
+          "MCP-Protocol-Version": "2025-03-26",
+        },
+      );
+      expect(response.status).toBe(200);
+      const data = (await response.json()) as {
+        result: { content: { text: string }[]; isError?: boolean };
+      };
+      expect(data.result.isError).not.toBe(true);
+      return JSON.parse(data.result.content[0].text);
+    };
+    const fetched = await rpc("get_character", { id: c.id });
+    expect(fetched).toMatchObject(expected);
+    const updated = await rpc("update_character", {
+      character: { ...fetched, lost: false, keyConnection: null },
+    });
+    expect(updated).toMatchObject({
+      ...expected,
+      lost: false,
+      keyConnection: null,
+    });
+    expect(
+      await (await request(`/api/characters/${c.id}`)).json(),
+    ).toMatchObject({ ...expected, lost: false, keyConnection: null });
+    expect(
+      await (
+        await request(`/api/public/characters/${shareId}`, "GET", undefined, "")
+      ).json(),
+    ).toMatchObject({ character: { lost: false, keyConnection: null } });
+    const created = await rpc("create_character", {
+      edition: "7",
+      name: "新項目MCP",
+      stats: { DEX: 60 },
+      statModifiers: c.statModifiers,
+      inventory: c.inventory,
+      weapons: c.weapons,
+      keyConnection: "belief",
+      lost: true,
+    });
+    expect(created.character).toMatchObject({
+      inventory: c.inventory,
+      weapons: c.weapons,
+      statModifiers: c.statModifiers,
+      keyConnection: "belief",
+      lost: true,
+    });
+    expect(
+      (await rpc("get_rules", { edition: "6" })).keyConnectionFields,
+    ).toEqual([]);
+    expect(
+      (await rpc("get_rules", { edition: "7" })).keyConnectionFields,
+    ).toContain("importantPeople");
+    await request(`/api/characters/${c.id}`, "DELETE");
+    await request(`/api/characters/${created.character.id}`, "DELETE");
+  });
+
   it("serves immutable asset responses with security headers", async () => {
     const asset = await fetch("data:text/html,<title>Arkhive</title>");
     expect(() => asset.headers.set("X-Test", "value")).toThrow();

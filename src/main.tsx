@@ -41,6 +41,10 @@ import {
 } from "lucide-react";
 import {
   characterSchema,
+  backgroundFields,
+  hasSkillInvestment,
+  isKeyConnection,
+  statTotal,
   derived,
   interestPoints,
   makeSkills,
@@ -64,6 +68,12 @@ import {
 import "./style.css";
 import { compressImage } from "./client/compress-image";
 import { NumberInput } from "./client/NumberInput";
+import { OptionalNumberInput } from "./client/OptionalNumberInput";
+import {
+  EquipmentEditor,
+  EquipmentDetails,
+  LostBadge,
+} from "./client/SheetExtras";
 import { PublicSheet } from "./client/PublicSheet";
 import { toCcfoliaCharacter } from "./shared/ccfolia";
 import { imageUrl } from "./shared/images";
@@ -172,7 +182,9 @@ function CharacterSheet({
           alt={`${c.name || "探索者"}の画像`}
         />
       )}
-      <h2>{c.name || "名前のない探索者"}</h2>
+      <h2>
+        {c.name || "名前のない探索者"} <LostBadge lost={c.lost} />
+      </h2>
       <p>
         {c.occupation || "職業未設定"} · {c.age}歳 · {c.gender} · プレイヤー：
         {c.player || "未設定"}
@@ -184,10 +196,14 @@ function CharacterSheet({
         {statKeys.map((k) => (
           <div key={k}>
             <span>{k}</span>
-            <b>{c.stats[k]}</b>
+            <b>{statTotal(c, k)}</b>
+            <small>
+              基本 {c.stats[k]} / 補正 {c.statModifiers[k] ?? "未指定"}
+            </small>
             {c.edition === "7" && (
               <small>
-                {Math.floor(c.stats[k] / 2)} / {Math.floor(c.stats[k] / 5)}
+                {Math.floor(statTotal(c, k) / 2)} /{" "}
+                {Math.floor(statTotal(c, k) / 5)}
               </small>
             )}
           </div>
@@ -199,12 +215,17 @@ function CharacterSheet({
         　DB {d.db}
         {c.edition === "7" && `　ビルド ${d.build}　MOV ${d.mov}`}
       </div>
+      <EquipmentDetails c={c} />
       <h3>技能</h3>
       <div className="print-skills">
         {sortSkills(c.skills).map((s) => (
           <div key={s.id}>
             <span>{skillName(s)}</span>
             <b>{skillTotal(s, c)}%</b>
+            <small>
+              初期 {skillBase(s, c)} / 職業 {s.occupation} / 興味 {s.interest} /
+              成長 {s.growth} / 補正 {s.modifier ?? "未指定"}
+            </small>
             {c.edition === "7" && (
               <small>
                 {Math.floor(skillTotal(s, c) / 2)} /{" "}
@@ -222,14 +243,16 @@ function CharacterSheet({
           ["meaningfulPlaces", "意味のある場所"],
           ["treasuredPossessions", "秘蔵の品"],
           ["traits", "特徴"],
-          ["equipment", "装備と所持品"],
           ["notes", "セッションメモ"],
         ] as const
       )
-        .filter(([key]) => c[key])
+        .filter(([key]) => c[key] || isKeyConnection(c, key))
         .map(([key, label]) => (
           <div className="print-note" key={key}>
-            <h3>{label}</h3>
+            <h3>
+              {label}
+              {isKeyConnection(c, key) && " ★ キーコネクション"}
+            </h3>
             <p>{c[key]}</p>
           </div>
         ))}
@@ -799,6 +822,14 @@ function App() {
     update({
       edition,
       stats,
+      statModifiers: Object.fromEntries(
+        statKeys.map((key) => [
+          key,
+          c.statModifiers[key] === null
+            ? null
+            : Math.round(c.statModifiers[key] * factor),
+        ]),
+      ) as Character["statModifiers"],
       skills: makeSkills(edition),
       pointMode: "edu",
       currentHP: null,
@@ -818,6 +849,7 @@ function App() {
       occupation: 0,
       interest: 0,
       growth: 0,
+      modifier: null,
       custom: true,
       category: "自由技能",
     };
@@ -839,7 +871,7 @@ function App() {
     statKeys.every((k) => c.stats[k] > 0),
     usedOp > 0 || usedIp > 0,
     !!(c.appearance || c.belief || c.notes),
-    !!c.equipment,
+    c.inventory.length > 0 || c.weapons.length > 0,
   ].filter(Boolean).length;
   const archiveSheets = sheets
     .filter(
@@ -939,7 +971,8 @@ function App() {
               <span>
                 {s.name || "名前のない探索者"}
                 <small>
-                  第{s.edition}版 · {s.occupation || "職業未設定"}
+                  第{s.edition}版 · {s.occupation || "職業未設定"}{" "}
+                  {s.lost && "· ロスト"}
                 </small>
               </span>
               {view === "editor" && s.id === c.id && (
@@ -1178,6 +1211,7 @@ function App() {
                           )}
                         </span>
                         <span className="edition-badge">第{s.edition}版</span>
+                        <LostBadge lost={s.lost} />
                       </div>
                       <h3>{s.name || "名前のない探索者"}</h3>
                       <p>
@@ -1188,7 +1222,7 @@ function App() {
                         {["STR", "DEX", "INT", "EDU"].map((key) => (
                           <span key={key}>
                             {key}
-                            <b>{s.stats[key as StatKey] || "—"}</b>
+                            <b>{statTotal(s, key as StatKey)}</b>
                           </span>
                         ))}
                       </div>
@@ -1274,7 +1308,9 @@ function App() {
                     <FileText size={20} />
                   </span>
                   <div>
-                    <h2>{c.name || "新しい探索者"}</h2>
+                    <h2>
+                      {c.name || "新しい探索者"} <LostBadge lost={c.lost} />
+                    </h2>
                     <span>{c.name ? "編集中" : "下書き"}</span>
                   </div>
                   <button
@@ -1387,6 +1423,15 @@ function App() {
                           title="基本情報"
                           sub="探索者名や職業などを入力してください。"
                         />
+                        <label className="check-label lost-toggle">
+                          <input
+                            type="checkbox"
+                            checked={c.lost}
+                            onChange={(e) => update({ lost: e.target.checked })}
+                          />
+                          ロストした探索者
+                          <small>いつでも解除できます</small>
+                        </label>
                         <div className="profile-layout">
                           <div
                             className="character-image-editor"
@@ -1844,7 +1889,7 @@ function App() {
                                 setAllocatedOnly(e.target.checked)
                               }
                             />
-                            割り振り済み
+                            割り振り・補正あり
                           </label>
                         </div>
                         <div className="skill-scroll-hint">
@@ -1868,6 +1913,7 @@ function App() {
                                 <th>職業</th>
                                 <th>興味</th>
                                 <th>成長</th>
+                                <th>補正</th>
                                 <th>合計</th>
                                 {c.edition === "7" && (
                                   <>
@@ -1884,8 +1930,7 @@ function App() {
                                     s.name.includes(search) &&
                                     (category === "すべて" ||
                                       s.category === category) &&
-                                    (!allocatedOnly ||
-                                      s.occupation + s.interest + s.growth > 0),
+                                    (!allocatedOnly || hasSkillInvestment(s)),
                                 )
                                 .map((s) => (
                                   <tr
@@ -1935,7 +1980,7 @@ function App() {
                                           />
                                           {s.name === "クトゥルフ神話" && (
                                             <small className="mythos-note">
-                                              成長のみ
+                                              成長・補正のみ
                                             </small>
                                           )}
                                         </>
@@ -1979,6 +2024,18 @@ function App() {
                                         />
                                       </td>
                                     ))}
+                                    <td>
+                                      <OptionalNumberInput
+                                        aria-label={`${s.name}の補正値`}
+                                        value={s.modifier}
+                                        min={-999}
+                                        max={999}
+                                        placeholder="未指定"
+                                        onValueChange={(modifier) =>
+                                          updateSkill(s.id, { modifier })
+                                        }
+                                      />
+                                    </td>
                                     <td
                                       className={
                                         skillTotal(s, c) > 99
@@ -2009,8 +2066,7 @@ function App() {
                             s.name.includes(search) &&
                             (category === "すべて" ||
                               s.category === category) &&
-                            (!allocatedOnly ||
-                              s.occupation + s.interest + s.growth > 0),
+                            (!allocatedOnly || hasSkillInvestment(s)),
                         ) && (
                           <div className="empty-search">
                             該当する技能がありません。
@@ -2030,6 +2086,27 @@ function App() {
                         title="バックストーリー"
                         sub="容姿や信念などを自由に入力できます。"
                       />
+                      {c.edition === "7" && (
+                        <Field label="キーコネクション">
+                          <select
+                            aria-label="キーコネクション"
+                            value={c.keyConnection ?? ""}
+                            onChange={(e) =>
+                              update({
+                                keyConnection: (e.target.value ||
+                                  null) as Character["keyConnection"],
+                              })
+                            }
+                          >
+                            <option value="">未指定</option>
+                            {backgroundFields.map(([key, label]) => (
+                              <option key={key} value={key}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                      )}
                       <div className="story-grid">
                         {(
                           [
@@ -2065,7 +2142,10 @@ function App() {
                             ],
                           ] as const
                         ).map(([key, label, placeholder]) => (
-                          <Field key={key} label={label}>
+                          <Field
+                            key={key}
+                            label={`${label}${isKeyConnection(c, key) ? " ★ キーコネクション" : ""}`}
+                          >
                             <textarea
                               value={c[key]}
                               maxLength={4000}
@@ -2087,17 +2167,7 @@ function App() {
                         title="装備と探索の記録"
                         sub="所持品やセッション中の記録を入力できます。"
                       />
-                      <Field label="装備と所持品" hint="EQUIPMENT">
-                        <textarea
-                          value={c.equipment}
-                          placeholder="武器、持ち物、収入と財産など。"
-                          rows={8}
-                          maxLength={10000}
-                          onChange={(e) =>
-                            update({ equipment: e.target.value })
-                          }
-                        />
-                      </Field>
+                      <EquipmentEditor c={c} onChange={update} />
                       <Field label="セッションメモ" hint="SESSION NOTES">
                         <textarea
                           value={c.notes}
@@ -2129,7 +2199,10 @@ function App() {
                         )}
                         <span />
                       </div>
-                      <h3>{c.name || "名前のない探索者"}</h3>
+                      <h3>
+                        {c.name || "名前のない探索者"}{" "}
+                        <LostBadge lost={c.lost} />
+                      </h3>
                       <p>{c.occupation || "職業未設定"}</p>
                       {c.player && <small>PLAYER · {c.player}</small>}
                     </div>
@@ -2170,7 +2243,7 @@ function App() {
                       {statKeys.map((k) => (
                         <div key={k}>
                           <span>{k}</span>
-                          <b>{c.stats[k] || "—"}</b>
+                          <b>{statTotal(c, k)}</b>
                         </div>
                       ))}
                     </div>
@@ -2482,7 +2555,7 @@ function App() {
               <p className="modal-description">
                 第{c.edition === "7" ? "6" : "7"}版へ切り替えます。能力値を
                 {c.edition === "7" ? "1/5" : "5倍"}
-                に換算し、技能一覧と割り振りポイントを初期化します。
+                に換算し、能力補正も同じ倍率で換算します。技能一覧・割り振りポイント・技能補正を初期化します。
                 <br />
                 現在の内容を残す場合は、先にJSON出力してください。
               </p>
@@ -2785,12 +2858,30 @@ function App() {
                   update({ stats: { ...c.stats, [k]: value } })
                 }
               />
+              <label className="stat-modifier">
+                補正
+                <OptionalNumberInput
+                  aria-label={`${k}の補正値`}
+                  value={c.statModifiers[k]}
+                  min={-999}
+                  max={999}
+                  placeholder="未指定"
+                  onValueChange={(value) =>
+                    update({
+                      statModifiers: { ...c.statModifiers, [k]: value },
+                    })
+                  }
+                />
+              </label>
+              <div className="stat-effective">
+                合計 <b>{statTotal(c, k)}</b>
+              </div>
               <small>
                 {c.edition === "7"
                   ? "½ " +
-                    Math.floor(c.stats[k] / 2) +
+                    Math.floor(statTotal(c, k) / 2) +
                     "　⅕ " +
-                    Math.floor(c.stats[k] / 5)
+                    Math.floor(statTotal(c, k) / 5)
                   : k === "SIZ" || k === "INT"
                     ? "2D6+6"
                     : k === "EDU"
@@ -2832,7 +2923,7 @@ function App() {
             {c.edition === "7"
               ? "SIZ・INT・EDUは（2D6+6）×5、その他は3D6×5。"
               : "SIZ・INTは2D6+6、EDUは3D6+3、その他は3D6。"}
-            ロール後も値を調整できます。
+            ロール後も値を調整できます。補正は基本値とは別に保存し、合計から派生値・技能初期値・ポイント上限を計算します。
           </div>
         )}
       </section>
