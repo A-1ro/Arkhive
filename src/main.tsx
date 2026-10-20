@@ -41,13 +41,14 @@ import {
 } from "lucide-react";
 import {
   characterSchema,
+  convertEdition,
+  resourceInputLimit,
   backgroundFields,
   hasSkillInvestment,
   isKeyConnection,
   statTotal,
   derived,
   interestPoints,
-  makeSkills,
   newCharacter,
   occupationPoints,
   rollAll,
@@ -69,6 +70,9 @@ import "./style.css";
 import { compressImage } from "./client/compress-image";
 import { NumberInput } from "./client/NumberInput";
 import { OptionalNumberInput } from "./client/OptionalNumberInput";
+import { readLocalDrafts, saveLocalDrafts } from "./client/local-drafts";
+import { parseCharacterBackup } from "./shared/character-backup";
+import { maxBackupBytes } from "./shared/character-size";
 import {
   EquipmentEditor,
   EquipmentDetails,
@@ -95,23 +99,14 @@ type Modal =
   | "ccfolia"
   | null;
 type Toast = { text: string; kind?: "error" | "ok" };
-const localKey = "mythos-notebook-v1";
-function readLocal(): Character[] {
-  try {
-    const data = JSON.parse(localStorage.getItem(localKey) || "[]");
-    if (!Array.isArray(data)) return [];
-    return data.flatMap((x) => {
-      const r = characterSchema.safeParse(x);
-      return r.success ? [r.data] : [];
-    });
-  } catch {
-    return [];
-  }
-}
 const publicShareId = location.pathname.startsWith("/shared/")
   ? location.pathname.slice("/shared/".length)
   : null;
-const initial = publicShareId === null ? readLocal() : [];
+const localDrafts =
+  publicShareId === null
+    ? readLocalDrafts(() => localStorage)
+    : { characters: [], raw: null, error: null };
+const initial = localDrafts.characters;
 if (!initial.length) initial.push(newCharacter());
 async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const r = await fetch(url, {
@@ -122,6 +117,16 @@ async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const data = (await r.json()) as T & { error?: string };
   if (!r.ok) throw new Error(data.error || "通信に失敗しました");
   return data;
+}
+function downloadJSON(text: string, filename: string) {
+  const a = document.createElement("a");
+  const url = URL.createObjectURL(
+    new Blob([text], { type: "application/json" }),
+  );
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 function Logo({ small = false }: { small?: boolean }) {
   return (
@@ -360,7 +365,9 @@ function App() {
   const [sharingBusy, setSharingBusy] = useState(false);
   const [sharingError, setSharingError] = useState("");
   const [imageBusy, setImageBusy] = useState<string | null>(null);
-  const [localError, setLocalError] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(
+    localDrafts.error,
+  );
   const [legacyImported, setLegacyImported] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("すべて");
@@ -459,11 +466,15 @@ function App() {
   }, []);
   useEffect(() => {
     try {
-      localStorage.setItem(localKey, JSON.stringify(sheets));
+      saveLocalDrafts(() => localStorage, sheets, localDrafts.error);
       if (legacyImported) localStorage.setItem(legacyImportKey, "done");
-      setLocalError(false);
-    } catch {
-      setLocalError(true);
+      setLocalError(null);
+    } catch (e) {
+      setLocalError(
+        e instanceof Error
+          ? e.message
+          : "端末保存に失敗しました。JSON出力で編集内容を保管してください。",
+      );
     }
   }, [sheets, legacyImported]);
   useEffect(() => {
@@ -769,24 +780,23 @@ function App() {
     }
   }
   function exportJSON() {
-    const a = document.createElement("a");
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(c, null, 2)], { type: "application/json" }),
+    downloadJSON(
+      JSON.stringify(c, null, 2),
+      `${c.name || "探索者"}_${c.edition}版.json`,
     );
-    a.href = url;
-    a.download = `${c.name || "探索者"}_${c.edition}版.json`;
-    a.click();
-    URL.revokeObjectURL(url);
     notify("JSONを書き出しました");
   }
   async function importJSON(file?: File) {
     if (!file) return;
-    if (file.size > 256 * 1024) {
-      notify("256KB以下のJSONを選択してください", "error");
-      return;
-    }
     try {
-      const parsed = characterSchema.parse(JSON.parse(await file.text()));
+      if (file.size > maxBackupBytes) {
+        notify(
+          "5 MiB以下のJSONを選択してください。元のファイルは変更していません。",
+          "error",
+        );
+        return;
+      }
+      const parsed = parseCharacterBackup(await file.text());
       parsed.id = crypto.randomUUID();
       parsed.image = null;
       parsed.updatedAt = new Date().toISOString();
@@ -815,31 +825,21 @@ function App() {
     }
   }
   function switchEdition() {
-    const edition = c.edition === "7" ? "6" : "7";
-    const factor = edition === "7" ? 5 : 0.2;
-    const stats = { ...c.stats };
-    statKeys.forEach((k) => (stats[k] = Math.round(stats[k] * factor)));
-    update({
-      edition,
-      stats,
-      statModifiers: Object.fromEntries(
-        statKeys.map((key) => [
-          key,
-          c.statModifiers[key] === null
-            ? null
-            : Math.round(c.statModifiers[key] * factor),
-        ]),
-      ) as Character["statModifiers"],
-      skills: makeSkills(edition),
-      pointMode: "edu",
-      currentHP: null,
-      currentMP: null,
-      currentSAN: null,
-    });
-    setModal(null);
-    notify(
-      `第${edition}版に切り替えました。技能ポイントを再設定してください。`,
-    );
+    try {
+      const converted = convertEdition(c);
+      update(converted);
+      setModal(null);
+      notify(
+        `第${converted.edition}版に切り替えました。技能ポイントを再設定してください。`,
+      );
+    } catch (e) {
+      notify(
+        e instanceof Error
+          ? e.message
+          : "版を切り替えられません。元の値は変更していません。",
+        "error",
+      );
+    }
   }
   function addSkill() {
     const s: Skill = {
@@ -1006,7 +1006,7 @@ function App() {
             <span
               className={`status-dot ${localError ? "status-error" : ""}`}
             />{" "}
-            {localError ? "端末保存の空き容量を確認" : "端末に自動保存"}
+            {localError ? "端末の自動保存を停止中" : "端末に自動保存"}
           </div>
         </div>
       </aside>
@@ -1076,6 +1076,24 @@ function App() {
           </div>
         </header>
         <main id="main-content" className={`workspace-${view}`} tabIndex={-1}>
+          {localError && (
+            <div className="validation-alert" role="alert">
+              <p>{localError}</p>
+              {localDrafts.error && localDrafts.raw !== null && (
+                <button
+                  className="button button-white"
+                  onClick={() =>
+                    downloadJSON(
+                      localDrafts.raw!,
+                      "Arkhive_端末データ_復旧用.json",
+                    )
+                  }
+                >
+                  元の端末データを書き出す
+                </button>
+              )}
+            </div>
+          )}
           {view === "archive" ? (
             <>
               <div className="page-heading archive-heading">
@@ -1635,11 +1653,14 @@ function App() {
                                 {label} <small>{short}</small>
                               </span>
                               <div>
-                                <NumberInput
+                                <OptionalNumberInput
                                   aria-label={`${label}の現在値`}
                                   min={0}
-                                  max={key === "currentSAN" ? d.maxSAN : value}
-                                  value={c[key] ?? value}
+                                  max={resourceInputLimit(
+                                    key === "currentSAN" ? d.maxSAN : value,
+                                  )}
+                                  value={c[key]}
+                                  placeholder={String(value)}
                                   onValueChange={(current) =>
                                     update({ [key]: current })
                                   }
@@ -1673,6 +1694,7 @@ function App() {
                           )}
                         </div>
                         <div className="info-note">
+                          現在値の空欄は自動計算値を使用します。現在値の指定は最大999までです。
                           年齢による能力値の減少・EDUの上達は自動適用されません。ルールブックに従って能力値を調整してください。移動率の年齢補正は自動計算します。
                         </div>
                       </section>

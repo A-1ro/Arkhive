@@ -65,6 +65,8 @@ export function createMcpServer(
         modifierNote:
           "能力値は stats + statModifiers、技能は初期値 + 職業 + 興味 + 成長 + modifier。補正の未指定はnull、明示的な0は0。能力値の合計を派生値・動的初期値・ポイント上限に使用。",
         keyConnectionFields: edition === "7" ? backgroundKeys : [],
+        saveSizeNote:
+          "探索者JSONはUTF-8で240 KiBまで（MCPリクエスト本体は256 KiBまで）。上限超過時は内容を減らしてから再保存。内容の切り捨ては行わない。",
       }),
   );
   server.registerTool(

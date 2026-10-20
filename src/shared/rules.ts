@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { maxImageBytes, maxImageDimension } from "./images";
+import { characterSizeError } from "./character-size";
 
 export const statKeys = [
   "STR",
@@ -23,8 +24,18 @@ export const statLabels: Record<StatKey, string> = {
   INT: "知性",
   EDU: "教育",
 };
-const point = z.number().int().min(0).max(999);
-const modifier = z.number().int().min(-999).max(999).nullable().default(null);
+export const maxStoredPoint = 999;
+export function resourceInputLimit(derivedMaximum: number) {
+  return Math.max(0, Math.min(maxStoredPoint, derivedMaximum));
+}
+const point = z.number().int().min(0).max(maxStoredPoint);
+const modifier = z
+  .number()
+  .int()
+  .min(-maxStoredPoint)
+  .max(maxStoredPoint)
+  .nullable()
+  .default(null);
 export const backgroundFields = [
   ["appearance", "容姿の描写"],
   ["belief", "イデオロギー／信念"],
@@ -420,6 +431,49 @@ export function die(sides = 6): number {
   } while (a[0] >= limit);
   return (a[0] % sides) + 1;
 }
+export function convertEdition(c: Character): Character {
+  const source = characterSchema.safeParse(c);
+  if (!source.success)
+    throw new Error(
+      "入力内容が保存形式に合わないため、版の切り替えを中止しました。元の値は変更していません。",
+    );
+  const edition = c.edition === "7" ? "6" : "7";
+  const factor = edition === "7" ? 5 : 0.2;
+  const converted: Character = {
+    ...source.data,
+    edition,
+    stats: Object.fromEntries(
+      statKeys.map((key) => [key, Math.round(c.stats[key] * factor)]),
+    ) as Character["stats"],
+    statModifiers: Object.fromEntries(
+      statKeys.map((key) => [
+        key,
+        c.statModifiers[key] === null
+          ? null
+          : Math.round(c.statModifiers[key] * factor),
+      ]),
+    ) as Character["statModifiers"],
+    skills: makeSkills(edition),
+    pointMode: "edu",
+    currentHP: null,
+    currentMP: null,
+    currentSAN: null,
+  };
+  const parsed = characterSchema.safeParse(converted);
+  if (!parsed.success) {
+    const path = parsed.error.issues[0].path;
+    const label =
+      path[0] === "stats"
+        ? `${String(path[1])}の基本値`
+        : path[0] === "statModifiers"
+          ? `${String(path[1])}の補正値`
+          : "探索者データ";
+    throw new Error(
+      `${label}が保存できる範囲を超えるため、第${edition}版への切り替えを中止しました。元の値は変更していません。`,
+    );
+  }
+  return parsed.data;
+}
 export function rollStat(key: StatKey | "LUCK", edition: Edition) {
   const two =
     key === "SIZ" || key === "INT" || (edition === "7" && key === "EDU");
@@ -541,6 +595,8 @@ export function derived(c: Character) {
 }
 export function validateAllocation(c: Character): string[] {
   const errors: string[] = [];
+  const sizeError = characterSizeError(c);
+  if (sizeError) errors.push(sizeError);
   if (c.skills.reduce((a, s) => a + s.occupation, 0) > occupationPoints(c))
     errors.push("職業ポイントが上限を超えています");
   if (c.skills.reduce((a, s) => a + s.interest, 0) > interestPoints(c))

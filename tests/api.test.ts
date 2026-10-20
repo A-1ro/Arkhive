@@ -12,6 +12,11 @@ import {
   canvasP3Webp,
 } from "./image-fixtures";
 import { characterImageKey } from "../src/server/images";
+import {
+  maxCloudCharacterBytes,
+  utf8Bytes,
+} from "../src/shared/character-size";
+import { sizedCharacter } from "./size-fixtures";
 let proxy: PlatformProxy<CloudflareBindings>;
 const firstToken = "first-user-local-test-token";
 const secondToken = "second-user-local-test-token";
@@ -437,6 +442,103 @@ describe("private R2 character images", () => {
   });
 });
 describe("D1 persistence and access control", () => {
+  it("uses the same UTF-8 save boundary for REST and MCP and preserves saved data after oversized requests", async () => {
+    const c = sizedCharacter(maxCloudCharacterBytes);
+    expect(utf8Bytes(JSON.stringify(c))).toBe(maxCloudCharacterBytes);
+    const saved = await request(`/api/characters/${c.id}`, "PUT", c);
+    expect(saved.status).toBe(200);
+    const original = await saved.json();
+    const call = async (character: unknown) => {
+      const response = await request(
+        "/mcp",
+        "POST",
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "update_character", arguments: { character } },
+        },
+        "",
+        {
+          Authorization: `Bearer ${bearer}`,
+          Accept: "application/json, text/event-stream",
+          "MCP-Protocol-Version": "2025-03-26",
+        },
+      );
+      expect(response.status).toBe(200);
+      return (
+        (await response.json()) as {
+          result: { content: { text: string }[]; isError?: boolean };
+        }
+      ).result;
+    };
+    const accepted = await call(c);
+    expect(accepted.isError).not.toBe(true);
+    expect(JSON.parse(accepted.content[0].text).inventory).toEqual(c.inventory);
+    const over = sizedCharacter(maxCloudCharacterBytes + 1);
+    over.id = c.id;
+    const rejected = await request(`/api/characters/${c.id}`, "PUT", over);
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toMatchObject({
+      error: expect.stringContaining("240 KiB"),
+    });
+    const rejectedMcp = await call(over);
+    expect(rejectedMcp.isError).toBe(true);
+    expect(JSON.parse(rejectedMcp.content[0].text).error).toContain("240 KiB");
+    const huge = {
+      ...over,
+      inventory: Array.from({ length: 90 }, () => ({
+        name: "装備",
+        quantity: null,
+        notes: "あ".repeat(1000),
+      })),
+    };
+    expect(utf8Bytes(JSON.stringify(huge))).toBeGreaterThan(270000);
+    expect((await request(`/api/characters/${c.id}`, "PUT", huge)).status).toBe(
+      413,
+    );
+    expect(
+      (
+        await request(
+          "/mcp",
+          "POST",
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: {
+              name: "update_character",
+              arguments: { character: huge },
+            },
+          },
+          "",
+          { Authorization: `Bearer ${bearer}` },
+        )
+      ).status,
+    ).toBe(413);
+    const unchanged = await (await request(`/api/characters/${c.id}`)).json();
+    expect(unchanged).toMatchObject({ ...c, updatedAt: expect.any(String) });
+    expect(unchanged).toMatchObject({
+      inventory: (original as typeof c).inventory,
+    });
+    // Sharing still exposes the previously saved intact sheet, never the rejected draft.
+    const published = await request(`/api/characters/${c.id}/sharing`, "PUT", {
+      enabled: true,
+    });
+    const { shareId } = (await published.json()) as { shareId: string };
+    expect(
+      await (
+        await request(`/api/public/characters/${shareId}`, "GET", undefined, "")
+      ).json(),
+    ).toMatchObject({ character: { inventory: c.inventory } });
+    // Reducing content restores both save paths.
+    c.inventory = c.inventory.slice(0, 1);
+    expect((await request(`/api/characters/${c.id}`, "PUT", c)).status).toBe(
+      200,
+    );
+    expect((await call(c)).isError).not.toBe(true);
+    await request(`/api/characters/${c.id}`, "DELETE");
+  });
   it("normalizes historical D1 JSON for private, list and public reads without rewriting the row", async () => {
     const { statModifiers, inventory, weapons, keyConnection, lost, ...old } =
       newCharacter("7");

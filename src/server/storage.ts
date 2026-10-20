@@ -9,10 +9,10 @@ export async function saveCharacter(
   input: unknown,
 ) {
   const c = characterSchema.parse(input);
-  // Image references are managed exclusively by the image API, including for MCP saves.
-  c.image = null;
   const errors = validateAllocation(c);
   if (errors.length) throw new Error(errors.join("・"));
+  // Image references are managed exclusively by the image API, including for MCP saves.
+  c.image = null;
   c.updatedAt = new Date().toISOString();
   const r = await db
     .prepare(
