@@ -35,25 +35,36 @@
 
 ## 開発
 
-Node.js 22以降、npm、CloudflareにログインしたWranglerが必要です。
+Node.js 22以降と pnpm 10.34.7 が必要です。公開操作には Cloudflare にログインした Wrangler を使います。
+`packageManager` と `pnpm-workspace.yaml` で pnpm を固定し、異なるバージョンでは停止します。
+初回は `npm install --global pnpm@10.34.7 --ignore-scripts` などで固定版を用意し、`pnpm --version` を確認してください。
+npm はこの初回導入にだけ使用し、プロジェクト依存の管理には pnpm を使用します。既存の npm の `node_modules` がある場合は、作業中の変更を退避してから削除してインストールし直してください。
 
 ```sh
-npm ci
-npm run build
-npm run db:local
-npm run dev:worker
+pnpm install --frozen-lockfile
+pnpm run build
+pnpm run db:local
+pnpm run dev:worker
 ```
 
-http://localhost:8787 を開きます。ホットリロードを使う場合は、別ターミナルで `npm run dev` を実行して http://localhost:5173 を開きます。APIは8787へプロキシします。
+http://localhost:8787 を開きます。ホットリロードを使う場合は、別ターミナルで `pnpm run dev` を実行して http://localhost:5173 を開きます。APIは8787へプロキシします。
 
 ローカルでDiscord認証も利用する場合は `.dev.vars.example` を `.dev.vars` にコピーし、開発用アプリの値を設定します。Discord側に同じコールバックURLを登録してください。`.dev.vars` はGit管理対象外です。
 
 ```sh
-npm run cf-typegen
-npm run typecheck
-npm run build
-npm test
+pnpm run cf-typegen
+pnpm run typecheck
+pnpm run build
+pnpm test
 ```
+
+依存更新は `pnpm add <package>` / `pnpm update <package>` で行い、`pnpm-lock.yaml` と設定の差分をレビューしてください。
+CI と Workers Builds は `pnpm install --frozen-lockfile` を使い、lockfile の不整合では停止します。
+依存の install script はバージョン付き許可リストで制限し、未確認の script はインストールエラーにします。
+許可を求められた場合はパッケージ内容と必要性を確認し、`pnpm-workspace.yaml` の該当バージョンだけを更新してください。
+`--no-optional` は TypeScript 7、esbuild、sharp、workerd のプラットフォーム別バイナリを欠落させるため使用しません。
+`pnpm audit --audit-level=low` で開発・任意依存も監査します。pnpm 単体はパッケージの安全性を保証しません。
+設定の根拠・限界と本番への切替手順は [pnpm 移行手順](.github/pnpm-migration.md)を参照してください。
 
 結合テストはWranglerの独立したローカルD1で実行し、本番データは変更しません。テスト対象は版別計算、ポイント制限、保存・更新、所有権、期限切れセッション、CSRF、不正入力、MCPの接続・探索者作成、OAuth認可・PKCE・認証コードの再利用防止・更新・連携解除です。
 
@@ -89,22 +100,22 @@ URLを知っていれば、ログインなしでシート全体（画像・プ�
 
 公開ページにはクラウドに保存した最新内容を表示します。初期状態は非公開です。「公開を停止する」でシートと画像の公開URLが失効し、再公開すると新しいURLを発行します。通常保存・JSON読込・MCP更新では公開設定を変更しません。既に閲覧者が保存したコピーは回収できません。
 
-公開前に `npm run db:remote` で `0004_character_sharing.sql` を適用してください。既存の探索者はすべて非公開のままです。
+公開前に `pnpm run db:remote` で `0004_character_sharing.sql` を適用してください。既存の探索者はすべて非公開のままです。
 
 ## 公開
 
 このプロジェクトの `wrangler.jsonc` は現在の公開WorkerとD1に接続しています。別アカウントに公開する場合は `wrangler d1 create` で自分のDBを作成し、`database_id` を変更してください。
 
 ```sh
-npm run db:remote
-npm run deploy
+pnpm run db:remote
+pnpm run deploy
 ```
 
-画像機能の初回公開前に、同じCloudflareアカウントで `npx wrangler r2 bucket create arkhive-character-images` を実行して非公開バケットを作成してください。`wrangler.jsonc` の `CHARACTER_IMAGES` バインディングが接続先です。既存環境にも `npm run db:remote` で `0003_character_images.sql` を適用してから公開します。
+画像機能の初回公開前に、同じCloudflareアカウントで `pnpm exec wrangler r2 bucket create arkhive-character-images` を実行して非公開バケットを作成してください。`wrangler.jsonc` の `CHARACTER_IMAGES` バインディングが接続先です。既存環境にも `pnpm run db:remote` で `0003_character_images.sql` を適用してから公開します。
 
-GitHub Actionsでは型検査・ビルド・テストを実行します。Cloudflareへの公開はローカルのWranglerから実行します。
+GitHub Actions では型検査・ビルド・テスト・依存監査・CodeQL を実行します。Cloudflare Workers Builds の main 用トリガーでも検証後に公開する構成です。pnpm への切替には [本番設定の適用手順](.github/pnpm-migration.md#cloudflare-workers-builds-の切替未実施)の実施が必要です。ローカルからの公開は `pnpm run deploy` を使います（`pnpm deploy` は pnpm 自体の別コマンドです）。
 
-旧URLのWorkerは `wrangler.legacy.jsonc` で管理します。`npm run deploy:legacy` で転送処理を公開できます。D1は改名前から同じデータベースを使用しています。
+旧URLのWorkerは `wrangler.legacy.jsonc` で管理します。`pnpm run deploy:legacy` で転送処理を公開できます。D1は改名前から同じデータベースを使用しています。
 
 旧URL（workers.dev）で端末保存した探索者は、新URLを開いた際にブラウザー内の通信で取り込みます。ブラウザーの制限などで取り込めない場合は、[改名前のURLのデータ書き出し](https://cthulhu-charactersheet.aaa-4e2k3.workers.dev/migrate) または [Arkhiveの旧URLのデータ書き出し](https://arkhive.aaa-4e2k3.workers.dev/migrate)を同じブラウザーで開き、JSONを出力して新URLの「読み込み」から追加できます。移行済みデータを再度取り込まないよう、端末内に完了状態を保存します。
 
@@ -151,7 +162,7 @@ ChatGPTやClaudeなど、OAuth対応のリモートMCPクライアントから�
 
 実装はOAuth認可コード + PKCE（S256）、動的クライアント登録（DCR）、Protected Resource / Authorization Serverメタデータ、自動更新・失効に対応しています。アクセストークンは最長1時間、認可コードは1分、ログイン前の連携リクエストは10分で失効します。資格情報はD1にハッシュのみ保存し、DiscordのアクセストークンはMCPクライアントに渡しません。更新資格情報は毎回ローテーションし、再利用を検出した連携は失効します。
 
-既存環境では、公開前に `npm run db:remote` で `0002_mcp_oauth.sql` を適用してください。以前の手動トークンは削除・無効化され、クライアント側でOAuthによる再連携が必要です。DiscordのRedirectsは既存の `/auth/discord/callback` を引き続き使うため、追加登録は不要です。
+既存環境では、公開前に `pnpm run db:remote` で `0002_mcp_oauth.sql` を適用してください。以前の手動トークンは削除・無効化され、クライアント側でOAuthによる再連携が必要です。DiscordのRedirectsは既存の `/auth/discord/callback` を引き続き使うため、追加登録は不要です。
 
 参考：[OpenAIのMCP認証要件](https://developers.openai.com/plugins/build/auth)、[MCP認可仕様](https://modelcontextprotocol.io/specification/latest/basic/authorization)。
 

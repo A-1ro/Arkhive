@@ -1,0 +1,15 @@
+# Keep tool selection explicit; fail instead of silently running another pnpm.
+packageManagerStrictVersion: true
+managePackageManagerVersions: false
+
+# Unreviewed dependency lifecycle scripts must stop installation.
+strictDepBuilds: true
+allowBuilds:
+  esbuild@0.28.2: true
+  workerd@1.20261012.1: true
+  # The optional macOS watcher ships a prebuilt binary; no rebuild is needed.
+  fsevents@2.3.3: false
+
+# Apply to new resolutions; a frozen lockfile remains the installation boundary.
+minimumReleaseAge: 1440
+blockExoticSubdeps: true

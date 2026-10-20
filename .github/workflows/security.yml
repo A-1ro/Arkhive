@@ -6,7 +6,7 @@ on:
     branches: [main]
   schedule:
     # Sunday 23:57 Asia/Tokyo; GitHub schedules may be delayed.
-    - cron: '57 14 * * 0'
+    - cron: "57 14 * * 0"
   workflow_dispatch:
 
 permissions:
@@ -22,21 +22,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      npm_config_ignore_scripts: 'true'
+      npm_config_ignore_scripts: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version: "22"
           package-manager-cache: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          run_install: false
       # Audit the committed lockfile without installing or executing project code.
       - name: Audit dependencies and classify the result
         shell: bash
         run: |
           set +e
-          npm audit --package-lock-only --include=dev --include=optional --audit-level=low --json --registry=https://registry.npmjs.org > "$RUNNER_TEMP/dependency-audit.json"
+          pnpm audit --audit-level=low --json --registry=https://registry.npmjs.org > "$RUNNER_TEMP/dependency-audit.json"
           audit_status=$?
           set -e
           export AUDIT_STATUS="$audit_status"
