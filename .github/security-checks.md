@@ -9,11 +9,14 @@ guaranteed. Check Actions for the latest completed run rather than assuming it r
 
 ## Dependency audit
 
-The committed npm lockfile is checked against the public npm registry,
+The committed pnpm lockfile is checked against the public npm registry,
 including development and optional dependencies. No project dependencies are
 installed and no project lifecycle scripts run in this job. Package names and
 versions are sent to the registry's advisory API; source code is not sent.
-The package manager is the npm bundled with Node 22.
+The package manager is pnpm 10.34.7, selected from `packageManager` using a
+SHA-pinned setup Action. `pnpm audit` includes development and optional
+dependencies by default; no production-only filter is used. No install step or
+package cache is used in this job. Registry failures are not ignored.
 
 Any low, moderate, high, or critical finding fails the job. The log includes
 advisory details and the job summary includes severity counts. The error title
@@ -51,6 +54,8 @@ overlapping configurations. Secret scanning is outside this workflow's scope.
 
 - [CodeQL workflow options](https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options)
 - [CodeQL Action permissions and supported versions](https://github.com/github/codeql-action)
-- [npm audit](https://docs.npmjs.com/cli/v11/commands/npm-audit/)
 - [pnpm audit](https://pnpm.io/10.x/cli/audit)
 - [GitHub scheduled events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+
+See [pnpm migration](pnpm-migration.md) for lifecycle-script restrictions,
+lockfile preservation, native dependency checks, and pending Workers Builds setup.
