@@ -3779,24 +3779,47 @@ h1 {
 }
 .stat-card > .stat-modifier {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin: 8px 0;
+  justify-content: center;
+  gap: 4px 6px;
+  margin: 8px 0 0;
 }
-.stat-modifier input {
-  width: 100%;
-  min-width: 0;
-  padding: 5px;
+.stat-modifier > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.stat-modifier > input {
+  flex: 1 1 48px;
+  width: 0;
+  min-width: 44px;
+  max-width: 72px;
+  min-height: 44px;
+  padding: 8px 4px;
+  appearance: none;
+  background: var(--bg-deep);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--text);
   text-align: center;
-  font-size: 13px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
-.stat-effective {
+.stat-modifier > input:hover,
+.stat-modifier > input:focus {
+  border-color: var(--gold);
+}
+.stat-card > .stat-effective {
+  flex-wrap: wrap;
+  margin-top: 10px;
+  gap: 4px;
   font-size: 12px;
   color: var(--muted);
 }
 .stat-effective b {
   color: var(--text);
   font-size: 18px;
+  white-space: nowrap;
 }
 .equipment-sections {
   display: grid;

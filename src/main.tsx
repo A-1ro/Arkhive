@@ -2052,7 +2052,6 @@ function App() {
                                         value={s.modifier}
                                         min={-999}
                                         max={999}
-                                        placeholder="未指定"
                                         onValueChange={(modifier) =>
                                           updateSkill(s.id, { modifier })
                                         }
@@ -2881,13 +2880,12 @@ function App() {
                 }
               />
               <label className="stat-modifier">
-                補正
+                <span>補正</span>
                 <OptionalNumberInput
                   aria-label={`${k}の補正値`}
                   value={c.statModifiers[k]}
                   min={-999}
                   max={999}
-                  placeholder="未指定"
                   onValueChange={(value) =>
                     update({
                       statModifiers: { ...c.statModifiers, [k]: value },
