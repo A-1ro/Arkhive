@@ -91,6 +91,114 @@ beforeAll(async () => {
 afterAll(async () => {
   await proxy?.dispose();
 });
+
+describe("MCP input element limits", () => {
+  const callTool = (name: string, args: unknown) =>
+    request(
+      "/mcp",
+      "POST",
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name, arguments: args },
+      },
+      "",
+      {
+        Authorization: `Bearer ${bearer}`,
+        Accept: "application/json, text/event-stream",
+        "MCP-Protocol-Version": "2025-03-26",
+      },
+    );
+
+  it.each(["array", "object"])(
+    "rejects excessive %s elements even below the request byte limit",
+    async (kind) => {
+      const padding =
+        kind === "array"
+          ? Array(9_999).fill(null)
+          : Object.fromEntries(
+              Array.from({ length: 9_999 }, (_, i) => [`key${i}`, null]),
+            );
+      const args = { edition: "7", padding };
+      expect(
+        new TextEncoder().encode(JSON.stringify(args)).length,
+      ).toBeLessThan(240 * 1024);
+      const response = await callTool("get_rules", args);
+      expect(response.status).toBe(200);
+      const data = (await response.json()) as {
+        result: { isError?: boolean; content: { text: string }[] };
+      };
+      expect(data.result.isError).toBe(true);
+      expect(data.result.content[0].text).toContain(
+        "maximum of 10000 elements",
+      );
+    },
+  );
+
+  it("accepts a request exactly at the element ceiling", async () => {
+    const response = await callTool("get_rules", {
+      edition: "7",
+      padding: Array(9_998).fill(null),
+    });
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as {
+      result: { isError?: boolean; content: { text: string }[] };
+    };
+    expect(data.result.isError).not.toBe(true);
+    expect(JSON.parse(data.result.content[0].text).edition).toBe("7");
+  });
+
+  it("keeps maximum-length valid character collections editable through MCP", async () => {
+    const c = newCharacter("7");
+    c.skills = Array.from({ length: 180 }, (_, i) => ({
+      ...c.skills[0],
+      id: `custom-${i}`,
+      name: `Custom ${i}`,
+      custom: true,
+    }));
+    c.inventory = Array.from({ length: 180 }, () => ({
+      name: "item",
+      quantity: 0,
+      notes: "x".repeat(800),
+    }));
+    c.weapons = Array.from({ length: 100 }, () => ({
+      name: "weapon",
+      skill: "",
+      damage: "1D6",
+      range: "",
+      attacks: "1",
+      ammo: "0",
+      malfunction: "00",
+      durability: "",
+      notes: "",
+    }));
+    c.terms = Array.from({ length: 8 }, () => ({
+      stat: "EDU" as const,
+      multiplier: 0,
+    }));
+    c.notes = "x".repeat(20_000);
+    expect((await request(`/api/characters/${c.id}`, "PUT", c)).status).toBe(
+      200,
+    );
+    try {
+      const response = await callTool("update_character", { character: c });
+      expect(response.status).toBe(200);
+      const data = (await response.json()) as {
+        result: { isError?: boolean; content: { text: string }[] };
+      };
+      expect(data.result.isError).not.toBe(true);
+      const saved = JSON.parse(data.result.content[0].text);
+      expect(saved.skills).toHaveLength(180);
+      expect(saved.inventory).toEqual(c.inventory);
+      expect(saved.weapons).toEqual(c.weapons);
+      expect(saved.terms).toHaveLength(8);
+      expect(saved.notes).toBe(c.notes);
+    } finally {
+      await request(`/api/characters/${c.id}`, "DELETE");
+    }
+  });
+});
 const imageRequest = (
   id: string,
   body: Uint8Array = opaqueWebp,
