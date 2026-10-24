@@ -19,15 +19,64 @@ dependencies by default; no production-only filter is used. No install step or
 package cache is used in this job. Registry failures are not ignored.
 
 Any low, moderate, high, or critical finding fails the job. The log includes
-advisory details and the job summary includes severity counts. The error title
-`Dependency vulnerabilities detected` means a completed scan found issues;
-`Dependency audit could not complete` means a registry, command, or report error.
+advisory details and the job summary includes severity counts. The JSON/summary
+status `findings` means a completed scan found issues; `incomplete` means a
+registry, command, tool-version or report error.
 Setup failures/timeouts also mean incomplete coverage. A failed scan is never a
 clean security result. No automatic fixes, suppressions, or ignored registry
-errors are configured. Findings require separate review and remediation.
+errors are configured. The workflow reports findings; remediation is performed by
+the separate daily Codex task described below and reviewed through pull requests.
 Only dependencies represented in the committed lockfile are covered; generated
 projects, unlocked fixtures, system packages, and vulnerabilities without a
 published advisory are outside this check.
+
+The shared collector is `scripts/collect-security-report.mjs` (also available as
+`pnpm run security:collect`). It records collection time, commit SHA, lockfile
+SHA-256, declared dependencies, severity counts and upstream advisory details as
+JSON. Exit codes are 0 for no low-or-higher findings, 1 for findings, and 2 for an
+incomplete scan. It refuses a different pnpm version and rejects malformed,
+inconsistent or unsupported reports. It runs without installing dependencies.
+`pnpm run test:security-report` exercises failure classification and provenance
+without network access. CI runs these tests on each PR.
+
+## Daily remediation pipeline
+
+The account's **Arkhive セキュリティ対応** Codex task runs daily in the Arkhive
+cloud environment. This task is scheduled separately from GitHub Actions; merging
+this repository alone does not create a scheduler. Manage its cadence or pause it
+in Codex tasks. The existing weekly Security workflow and Dependabot remain useful
+independent checks. The daily task uses the versioned
+[arkhive-security-remediation skill](../.agents/skills/arkhive-security-remediation/SKILL.md).
+
+1. Start from fresh `origin/main`, record its SHA, and collect npm advisories for
+   the complete lockfile without installing dependencies.
+2. Read public GitHub Advisories and official Node.js, Cloudflare, framework and
+   GitHub Action security notices. The agent performs this step; the JSON collector
+   only queries npm. Check affected versions and usage conditions against the code,
+   including development tooling. Check updated and older unresolved advisories.
+3. Compare findings with open PRs (including Dependabot), merged fixes and current
+   main. Fix confirmed issues in a small branch while preserving pnpm release-age
+   and lifecycle restrictions. Recheck for duplicates immediately before PR creation.
+4. Run frozen install, native dependency checks, typecheck, build, regression tests,
+   collector tests and a second audit. Use only local D1/R2 for integration tests.
+5. Create a PR with primary sources, impact, version changes, validation and remaining
+   issues. Check CI and Security results for that PR's current head commit.
+
+No new API key or Actions write token is embedded in the repository. The task needs
+its cloud environment, public-source access and the account's connected GitHub
+read/branch/push/PR access. Before enabling a replacement task, verify those reads
+and an audit in its actual environment. Connection failures, registry errors,
+unavailable sources and incomplete checks must be reported as incomplete coverage.
+Never reinterpret them as a clean scan. Draft PRs must identify unrun checks.
+
+Notify on a new PR, significant new finding, failure or required user action; avoid
+repeating unchanged outcomes. No empty PRs or daily status-only commits. There is
+no automatic merge, deployment, release or remote database operation. In particular,
+merging into main can trigger Workers Builds and remains a separate review decision.
+
+Manual invocation: ask Codex to run `$arkhive-security-remediation`, or direct it to
+read `.agents/skills/arkhive-security-remediation/SKILL.md`. Read the skill for the
+current sources, affected-feature checks, deduplication rules and validation commands.
 
 ## Code scanning
 

@@ -123,6 +123,8 @@ GitHub Actions では型検査・ビルド・テスト・依存監査・CodeQL �
 
 旧URL（workers.dev）で端末保存した探索者は、新URLを開いた際にブラウザー内の通信で取り込みます。ブラウザーの制限などで取り込めない場合は、[改名前のURLのデータ書き出し](https://cthulhu-charactersheet.aaa-4e2k3.workers.dev/migrate) または [Arkhiveの旧URLのデータ書き出し](https://arkhive.aaa-4e2k3.workers.dev/migrate)を同じブラウザーで開き、JSONを出力して新URLの「読み込み」から追加できます。移行済みデータを再度取り込まないよう、端末内に完了状態を保存します。
 
+公開脆弱性情報を毎日確認し、影響判定・修正・検証・PR作成まで進めるCodex定期タスクの手順は、[セキュリティ対応パイプライン](.github/security-checks.md#daily-remediation-pipeline)を参照してください。マージ・本番公開はレビュー後に行います。
+
 ## Discordログインの有効化
 
 アプリ作成は利用者本人が行います。認証コードは実装済みですが、Client ID / Client Secretを登録するまではログインとクラウド保存・MCP連携は利用できません。
