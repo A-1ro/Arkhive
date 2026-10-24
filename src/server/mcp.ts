@@ -18,10 +18,17 @@ export function createMcpServer(
   userId: string,
   origin: string,
 ) {
-  const server = new McpServer({
-    name: "arkhive-investigator-notebook",
-    version: "1.0.0",
-  });
+  const server = new McpServer(
+    {
+      name: "arkhive-investigator-notebook",
+      version: "1.0.0",
+    },
+    {
+      // GHSA-46jr-4wx8-v453: bound validation work as well as request bytes.
+      // Maximum valid character collections use fewer than 4,000 elements.
+      maxToolInputElements: 10_000,
+    },
+  );
   const result = (data: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
   });
