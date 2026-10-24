@@ -9,12 +9,14 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:security-report": "node --test scripts/security-report.test.mjs",
+    "security:collect": "node scripts/collect-security-report.mjs",
     "deploy": "pnpm run build && wrangler deploy",
     "deploy:legacy": "wrangler deploy --config wrangler.legacy.jsonc",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "format:check": "prettier --check src tests scripts/check-native-dependencies.mjs .github index.html package.json pnpm-workspace.yaml tsconfig.json vite.config.ts vitest.config.ts wrangler.jsonc README.md",
+    "format:check": "prettier --check src tests scripts/*.mjs .agents .github index.html package.json pnpm-workspace.yaml tsconfig.json vite.config.ts vitest.config.ts wrangler.jsonc README.md",
     "check:native": "node scripts/check-native-dependencies.mjs"
   },
   "dependencies": {

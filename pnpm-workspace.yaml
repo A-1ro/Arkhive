@@ -13,3 +13,8 @@ allowBuilds:
 # Apply to new resolutions; a frozen lockfile remains the installation boundary.
 minimumReleaseAge: 1440
 blockExoticSubdeps: true
+
+# Miniflare pins 7.29.1; use the patched 7.x release until upstream moves its pin.
+# GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c.
+overrides:
+  "miniflare@5.20261012.1-beta>undici": 7.30.1
