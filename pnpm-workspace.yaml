@@ -6,7 +6,7 @@ managePackageManagerVersions: false
 strictDepBuilds: true
 allowBuilds:
   esbuild@0.28.2: true
-  workerd@1.20261012.1: true
+  workerd@1.20261027.1: true
   # The optional macOS watcher ships a prebuilt binary; no rebuild is needed.
   fsevents@2.3.3: false
 
@@ -18,3 +18,8 @@ blockExoticSubdeps: true
 # GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c.
 overrides:
   "miniflare@5.20261012.1-beta>undici": 7.30.1
+  # Wrangler/Miniflare still pin this runtime with vulnerable native Brotli.
+  # CVE-2026-111497: workerd 2026-10-27 includes Brotli 1.2.1.
+  # Remove when the parent dependencies pin a patched workerd themselves.
+  "wrangler@4.151.1>workerd": 1.20261027.1
+  "miniflare@5.20261012.1-beta>workerd": 1.20261027.1
