@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { TrieRouter } from "hono/router/trie-router";
 import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
@@ -13,7 +14,8 @@ import { legacyOrigins } from "../shared/origins";
 import { characterImageKey, images } from "./images";
 import { sharing, publicCharacters } from "./sharing";
 
-const app = new Hono<Env>();
+// GHSA-h7mg-cq63-vhpq: retain wildcard middleware on encoded line terminators.
+const app = new Hono<Env>({ router: new TrieRouter() });
 const mcpOrigins = [
   "https://chatgpt.com",
   "https://claude.ai",

@@ -8,6 +8,21 @@ import {
 import { newCharacter } from "../src/shared/rules";
 
 describe("URL migration", () => {
+  it.each(["%0A", "%0D", "%E2%80%A8", "%E2%80%A9"])(
+    "keeps redirect and security headers for paths containing %s",
+    async (encoded) => {
+      const response = await legacy.request(`https://old.test/${encoded}`);
+      expect(response.status).toBe(308);
+      expect(response.headers.get("Location")).toBe(
+        `${canonicalOrigin}/${encoded}`,
+      );
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(response.headers.get("Content-Security-Policy")).toContain(
+        `frame-ancestors ${canonicalOrigin}`,
+      );
+      expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    },
+  );
   it("redirects paths and queries to the canonical origin", async () => {
     const response = await legacy.request(
       "https://cthulhu-charactersheet.aaa-4e2k3.workers.dev/?character=test",

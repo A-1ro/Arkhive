@@ -1,7 +1,9 @@
 import { Hono } from "hono";
+import { TrieRouter } from "hono/router/trie-router";
 import { canonicalOrigin } from "../shared/origins";
 
-const app = new Hono();
+// GHSA-h7mg-cq63-vhpq: retain wildcard middleware on encoded line terminators.
+const app = new Hono({ router: new TrieRouter() });
 app.use("*", async (c, next) => {
   c.header("Cache-Control", "no-store");
   c.header("X-Content-Type-Options", "nosniff");
