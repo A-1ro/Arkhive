@@ -6,16 +6,10 @@ managePackageManagerVersions: false
 strictDepBuilds: true
 allowBuilds:
   esbuild@0.28.2: true
-  workerd@1.20261109.1: true
+  workerd@1.20261119.1: true
   # The optional macOS watcher ships a prebuilt binary; no rebuild is needed.
   fsevents@2.3.3: false
 
 # Apply to new resolutions; a frozen lockfile remains the installation boundary.
 minimumReleaseAge: 1440
 blockExoticSubdeps: true
-
-# Miniflare still pins 7.30.1. Keep the fix scoped until its parent update
-# passes minimumReleaseAge. This cannot replace Wrangler's bundled copy.
-# https://github.com/nodejs/undici/releases/tag/v7.30.2
-overrides:
-  "miniflare@5.20261109.0-beta>undici": 7.30.2

@@ -45,13 +45,14 @@ npm 監査だけでは確認できない。公式のセキュリティ修正リ�
 
 - npm 監査結果の GHSA/CVE と上流の修正リリース。`pnpm why <package>` と lockfile で
   使用中の全バージョン・依存経路・修正済み範囲を確認する。
-- [GitHub Advisory Database](https://github.com/advisories) と直接依存の公式 Security
+- [GitHub Advisory Database](https://github.com/advisories) と直接・推移・同梱依存の公式 Security
   Advisories。特に [Hono](https://github.com/honojs/hono/security/advisories)、
   [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories)、
   [Vite](https://github.com/vitejs/vite/security/advisories)、
   [Vitest](https://github.com/vitest-dev/vitest/security/advisories)、
   [React](https://github.com/facebook/react/security/advisories)、
-  [pnpm](https://github.com/pnpm/pnpm/security/advisories)。依存変更時は対象も更新する。
+  [pnpm](https://github.com/pnpm/pnpm/security/advisories)、
+  [Undici](https://github.com/nodejs/undici/security/advisories)。依存変更時は対象も更新する。
 - 使用している GitHub Actions の上流リポジトリの Security Advisories とリリース。
   ワークフローから実際の owner/repo と固定 SHA を取り出して照合する。
 - [Node.js セキュリティ告知](https://nodejs.org/en/blog/vulnerability)。Node.js の
