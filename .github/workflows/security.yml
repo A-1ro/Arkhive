@@ -61,6 +61,8 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
+          # CLI 2.27.6 includes the JDK fix for Java4Shell (CVE-2026-114938).
+          tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.6/codeql-bundle-${{ matrix.language == 'javascript-typescript' && 'javascript' || matrix.language }}-linux64.tar.zst
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
