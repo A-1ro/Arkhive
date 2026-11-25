@@ -35,18 +35,24 @@ description: Arkhive の公開脆弱性情報を収集し、影響判定、最�
 JSON にはコミット、lockfile のハッシュ、監査日時、宣言依存、監査結果が入る。
 収集処理は npm 監査を行い、以下の公式告知の調査はこの手順を実行するエージェントが行う。
 
+Wrangler/Miniflare などが配布 JavaScript に同梱する依存は、利用側の lockfile と
+npm 監査だけでは確認できない。公式のセキュリティ修正リリースと配布物内の全バージョンも
+照合する。同梱済みコードは利用側の override では置き換わらないため、親パッケージを
+更新し、到達する機能の回帰テストと残る告知の条件確認を行う。
+
 毎回、以下の公開一次情報を取得する。直近24時間だけで打ち切らず、未対応の古い報告と
 既存報告の更新も対象にする。初回は現在の依存グラフ全体を確認する。
 
 - npm 監査結果の GHSA/CVE と上流の修正リリース。`pnpm why <package>` と lockfile で
   使用中の全バージョン・依存経路・修正済み範囲を確認する。
-- [GitHub Advisory Database](https://github.com/advisories) と直接依存の公式 Security
+- [GitHub Advisory Database](https://github.com/advisories) と直接・推移・同梱依存の公式 Security
   Advisories。特に [Hono](https://github.com/honojs/hono/security/advisories)、
   [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories)、
   [Vite](https://github.com/vitejs/vite/security/advisories)、
   [Vitest](https://github.com/vitest-dev/vitest/security/advisories)、
   [React](https://github.com/facebook/react/security/advisories)、
-  [pnpm](https://github.com/pnpm/pnpm/security/advisories)。依存変更時は対象も更新する。
+  [pnpm](https://github.com/pnpm/pnpm/security/advisories)、
+  [Undici](https://github.com/nodejs/undici/security/advisories)。依存変更時は対象も更新する。
 - 使用している GitHub Actions の上流リポジトリの Security Advisories とリリース。
   ワークフローから実際の owner/repo と固定 SHA を取り出して照合する。
 - [Node.js セキュリティ告知](https://nodejs.org/en/blog/vulnerability)。Node.js の
